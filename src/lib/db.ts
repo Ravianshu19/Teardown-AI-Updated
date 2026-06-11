@@ -37,14 +37,27 @@ const globalWithMongo = global as typeof globalThis & {
 };
 
 async function getMongoClient() {
-  if (globalWithMongo._mongoClient) return globalWithMongo._mongoClient;
   const uri = process.env.MONGODB_URI;
   if (!uri) throw new Error('MONGODB_URI not configured.');
 
   const { MongoClient } = await import('mongodb');
-  const client = new MongoClient(uri);
-  await client.connect();
-  globalWithMongo._mongoClient = client;
+
+  let client = globalWithMongo._mongoClient;
+  let isConnected = false;
+  if (client) {
+    try {
+      isConnected = client.topology && client.topology.isConnected();
+    } catch (e) {
+      isConnected = false;
+    }
+  }
+
+  if (!client || !isConnected) {
+    client = new MongoClient(uri);
+    await client.connect();
+    globalWithMongo._mongoClient = client;
+  }
+
   return client;
 }
 
@@ -69,10 +82,11 @@ export const db = {
     if (this.isCloud()) {
       try {
         const col = await getMongoCollection();
-        const doc = await col.findOne({ email: lowerEmail });
+        const doc = await col.findOne({ email: lowerEmail }, { projection: { _id: 0 } });
         return doc as unknown as User;
       } catch (err) {
-        console.error('MongoDB getUser error, falling back:', err);
+        console.error('MongoDB getUser error:', err);
+        throw err;
       }
     }
 
@@ -95,7 +109,8 @@ export const db = {
         );
         return;
       } catch (err) {
-        console.error('MongoDB saveUser error, falling back:', err);
+        console.error('MongoDB saveUser error:', err);
+        throw err;
       }
     }
 
@@ -111,10 +126,11 @@ export const db = {
     if (this.isCloud()) {
       try {
         const col = await getMongoCollection();
-        const doc = await col.findOne({ token });
+        const doc = await col.findOne({ token }, { projection: { _id: 0 } });
         return doc as unknown as User;
       } catch (err) {
-        console.error('MongoDB getUserByToken error, falling back:', err);
+        console.error('MongoDB getUserByToken error:', err);
+        throw err;
       }
     }
 
@@ -133,11 +149,12 @@ export const db = {
         const result = await col.findOneAndUpdate(
           { email: lowerEmail },
           { $set: updates },
-          { returnDocument: 'after' }
+          { projection: { _id: 0 }, returnDocument: 'after' }
         );
         return result as unknown as User;
       } catch (err) {
-        console.error('MongoDB updateUser error, falling back:', err);
+        console.error('MongoDB updateUser error:', err);
+        throw err;
       }
     }
 
@@ -166,7 +183,8 @@ export const db = {
         await col.deleteOne({ email: lowerEmail });
         return;
       } catch (err) {
-        console.error('MongoDB deleteUser error, falling back:', err);
+        console.error('MongoDB deleteUser error:', err);
+        throw err;
       }
     }
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
-import { db, User } from '@/lib/db';
+import { db } from '@/lib/db';
+import { User, sanitizeUser } from '@/lib/types';
 
 function hashPassword(password: string, salt: string) {
   return crypto.pbkdf2Sync(password, salt, 600000, 64, 'sha512').toString('hex');
@@ -110,14 +111,11 @@ export async function POST(req: NextRequest) {
 
     await db.saveUser(newUser);
 
+    const sanitized = sanitizeUser(newUser);
+
     return NextResponse.json({
       token,
-      name,
-      email: lowerEmail,
-      plan: newUser.plan,
-      credits: newUser.credits,
-      maxCreds: newUser.maxCreds,
-      team: newUser.team,
+      ...sanitized
     });
   } catch (err: any) {
     console.error('API register route error:', err.message);

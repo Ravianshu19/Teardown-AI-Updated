@@ -1314,9 +1314,9 @@ function SettingsView({
         
         <div className="ti" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '10px', padding: '16px' }}>
           <div style={{ fontSize: '13px', fontWeight: 600 }}>Email address</div>
-          <div style={{ display: 'flex', gap: '8px', width: '100%', flexWrap: 'wrap' }}>
-            <input className="inp" style={{ flex: 1, minWidth: '140px', padding: '8px 12px', fontSize: '13px' }} value={setFieldEmail} onChange={e => setSetFieldEmail(e.target.value)} />
-            <button className="r-btn r-btn-p" onClick={() => handleSaveSetting('email')}>Update</button>
+          <div style={{ display: 'flex', gap: '8px', width: '100%', flexWrap: 'wrap', alignItems: 'center' }}>
+            <input className="inp" style={{ flex: 1, minWidth: '140px', padding: '8px 12px', fontSize: '13px', opacity: 0.7, cursor: 'not-allowed' }} value={setFieldEmail} readOnly disabled />
+            <span style={{ fontSize: '11px', color: 'var(--muted)' }}>Email cannot be changed</span>
           </div>
         </div>
         

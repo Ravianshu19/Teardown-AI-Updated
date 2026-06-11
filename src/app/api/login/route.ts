@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { db } from '@/lib/db';
+import { sanitizeUser } from '@/lib/types';
 
 function hashPassword(password: string, salt: string) {
   return crypto.pbkdf2Sync(password, salt, 600000, 64, 'sha512').toString('hex');
@@ -26,18 +27,16 @@ export async function POST(req: NextRequest) {
     }
 
     const token = crypto.randomBytes(24).toString('hex');
-    await db.updateUser(lowerEmail, { token });
+    const updatedUser = await db.updateUser(lowerEmail, { token });
+    if (!updatedUser) {
+      return NextResponse.json({ error: 'Server error during authentication.' }, { status: 500 });
+    }
+
+    const sanitized = sanitizeUser(updatedUser);
 
     return NextResponse.json({
       token,
-      name: user.name,
-      email: user.email,
-      plan: user.plan || 'Free',
-      credits: user.credits !== undefined ? user.credits : 10,
-      maxCreds: user.maxCreds || 10,
-      team: user.team || [
-        { initials: user.name.split(' ').map(n=>n[0]).join('').toUpperCase().slice(0,2), name: user.name + ' (Admin)', role: 'admin', tears: 0, lastActive: 'Online now', col: 'ic-g' }
-      ]
+      ...sanitized
     });
   } catch (err: any) {
     console.error('API login route error:', err.message);

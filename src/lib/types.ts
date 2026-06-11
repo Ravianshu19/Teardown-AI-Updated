@@ -80,6 +80,7 @@ export interface Report {
   rice?: RiceItem[];
   prd?: PrdSpec;
   features?: string[];
+  sources?: string[];
   isComparison?: boolean;
 }
 
@@ -104,4 +105,9 @@ export interface User {
   maxCreds: number;
   reports: Report[];
   team: TeamMember[];
+}
+
+export function sanitizeUser(user: User) {
+  const { passwordHash, salt, token, reports, ...sanitized } = user;
+  return sanitized;
 }

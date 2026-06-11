@@ -25,7 +25,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { PRODUCT_DB } from '@/lib/products';
-import { Report, Competitor, TeamMember } from '@/lib/types';
+import { Report, Competitor, TeamMember, Persona } from '@/lib/types';
 
 interface UserState {
   name: string;
@@ -101,6 +101,14 @@ export default function LandingPage() {
     if (savedToken) {
       setToken(savedToken);
       fetchSession(savedToken);
+    } else {
+      // Guest path: trigger immediately since there's no session to wait for
+      const params = new URLSearchParams(window.location.search);
+      const queryQ = params.get('q');
+      if (queryQ) {
+        setSearchQuery(queryQ);
+        triggerAnalysis(queryQ, null, null);
+      }
     }
 
     // URL Query Routing
@@ -108,14 +116,6 @@ export default function LandingPage() {
     if (params.get('auth') === 'true') {
       setIsAuthModalOpen(true);
       setAuthTab('login');
-    }
-    const queryQ = params.get('q');
-    if (queryQ) {
-      setSearchQuery(queryQ);
-      // Auto run analysis after brief delay to allow page loads
-      setTimeout(() => {
-        triggerAnalysis(queryQ, savedToken);
-      }, 500);
     }
   }, []);
 
@@ -142,21 +142,31 @@ export default function LandingPage() {
       const res = await fetch('/api/session', {
         headers: { Authorization: `Bearer ${authToken}` }
       });
+      let sessionUser = null;
       if (res.ok) {
         const data = await res.json();
-        setUser({
+        sessionUser = {
           name: data.name,
           email: data.email,
           plan: data.plan,
           credits: data.credits,
           maxCreds: data.maxCreds,
           team: data.team || []
-        });
+        };
+        setUser(sessionUser);
         fetchReports(authToken);
       } else {
         localStorage.removeItem('auth_token');
         setToken(null);
         setUser(null);
+      }
+
+      // Check URL parameters after session fetch completes (regardless of success/fail)
+      const params = new URLSearchParams(window.location.search);
+      const queryQ = params.get('q');
+      if (queryQ) {
+        setSearchQuery(queryQ);
+        triggerAnalysis(queryQ, res.ok ? authToken : null, sessionUser);
       }
     } catch (err) {
       console.error('Session validation error:', err);
@@ -296,7 +306,11 @@ export default function LandingPage() {
   };
 
   // Analysis engine trigger
-  const triggerAnalysis = async (queryVal: string, activeAuthToken: string | null = token) => {
+  const triggerAnalysis = async (
+    queryVal: string,
+    activeAuthToken: string | null = token,
+    overrideUser: any = null
+  ) => {
     if (isRunning) return;
     const name = queryVal.trim();
     if (!name) {
@@ -304,8 +318,9 @@ export default function LandingPage() {
       return;
     }
 
+    const activeUser = overrideUser || user;
     // Credits checking
-    if (user && user.plan !== 'Pro' && user.credits <= 0) {
+    if (activeUser && activeUser.plan !== 'Pro' && activeUser.credits <= 0) {
       showToast('Out of credits! Please upgrade your plan or log in to continue.', 'warn');
       document.getElementById('pricing')?.scrollIntoView({ behavior: 'smooth' });
       return;
@@ -397,18 +412,32 @@ export default function LandingPage() {
           note: ''
         };
 
-        // Simulated credit deduct
-        let nextCredits = user ? user.credits : 10;
-        if (user && user.plan !== 'Pro' && nextCredits > 0) {
-          nextCredits--;
+        // Post to database to decrement credit and save history
+        let savedCredits = user ? user.credits : 10;
+        if (activeAuthToken) {
+          try {
+            const saveRes = await fetch('/api/reports', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${activeAuthToken}`
+              },
+              body: JSON.stringify(mockReport)
+            });
+            if (saveRes.ok) {
+              const saveData = await saveRes.json();
+              savedCredits = saveData.credits !== undefined ? saveData.credits : savedCredits;
+            }
+          } catch (e) {
+            console.error('Error saving curated report:', e);
+          }
         }
 
-        // If credits left goes to exactly 2, alert user
-        if (user && user.plan !== 'Pro' && nextCredits <= 2 && nextCredits > 0) {
-          showToast(`${nextCredits} credits left — upgrade for unlimited.`, 'warn');
+        if (user && user.plan !== 'Pro' && savedCredits <= 2 && savedCredits > 0) {
+          showToast(`${savedCredits} credits left — upgrade for unlimited.`, 'warn');
         }
 
-        finishAnalysis(mockReport, nextCredits);
+        finishAnalysis(mockReport, savedCredits);
       }, stepDelay * 7);
 
     } else {
@@ -530,7 +559,7 @@ The JSON object must strictly match the following structure:
 Ensure all numerical scores and ratings are realistic (0-100). Competitor arrays must contain exactly 5 competitors. Strengths, weaknesses, opportunities, threats lists must contain exactly 3 items. Features must contain exactly 5 items. Acceptance criteria must contain exactly 4 items, success metrics exactly 3, and open questions exactly 2. All journey stages must be in the correct order: Discovery, Onboarding, Activation, Retention, Referral.`;
 
       const payload = {
-        model: 'claude-3-5-sonnet-20241022',
+        model: 'claude-3-5-sonnet-latest',
         max_tokens: 4000,
         system: systemPrompt,
         messages: [{ role: 'user', content: `Generate a detailed product teardown for the product or URL: "${name}".` }]
@@ -695,11 +724,8 @@ Ensure all numerical scores and ratings are realistic (0-100). Competitor arrays
             note: ''
           };
 
-          let nextCredits = user ? user.credits : 10;
-          if (user && user.plan !== 'Pro' && nextCredits > 0) {
-            nextCredits--;
-          }
-          finishAnalysis(mockReport, nextCredits);
+          const currentCredits = user ? user.credits : 10;
+          finishAnalysis(mockReport, currentCredits);
         }, 800);
       }
     }
@@ -1393,7 +1419,6 @@ Ensure all numerical scores and ratings are realistic (0-100). Competitor arrays
                 <div style={{ marginBottom: '20px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
                     <label className="auth-lbl" style={{ marginBottom: 0 }}>Password</label>
-                    <a href="#" onClick={(e) => { e.preventDefault(); showToast('Password reset link sent to your email (simulated).', 'ok'); }} style={{ fontSize: '11px', color: 'var(--acc)', textDecoration: 'none', fontWeight: 600 }}>Forgot password?</a>
                   </div>
                   <input className="inp" type="password" placeholder="••••••••" required value={loginPassword} onChange={e => setLoginPassword(e.target.value)} autoComplete="current-password" />
                 </div>
@@ -1411,7 +1436,7 @@ Ensure all numerical scores and ratings are realistic (0-100). Competitor arrays
                 </div>
                 <div style={{ marginBottom: '20px' }}>
                   <label className="auth-lbl">Password</label>
-                  <input className="inp" type="password" placeholder="Min. 6 characters" required value={regPassword} onChange={e => setRegPassword(e.target.value)} autoComplete="new-password" />
+                  <input className="inp" type="password" placeholder="Min. 6 characters" required minLength={6} value={regPassword} onChange={e => setRegPassword(e.target.value)} autoComplete="new-password" />
                 </div>
                 <button className="auth-submit-btn" type="submit">Create Account</button>
               </form>
@@ -1449,13 +1474,13 @@ function OverviewTab({ report }: { report: Report }) {
     const dStr = Array.from({ length: n }, (_, i) => pt(i, R * f))
       .map((p, i) => (i === 0 ? 'M' : 'L') + p[0] + ' ' + p[1])
       .join(' ') + 'Z';
-    return <path key={ringIdx} d={dStr} fill="none" stroke="#e0ded8" strokeWidth="1" />;
+    return <path key={ringIdx} d={dStr} fill="none" stroke="var(--border)" strokeWidth="1" />;
   });
 
   // Spokes
   const spokes = Array.from({ length: n }, (_, i) => {
     const [x, y] = pt(i, R);
-    return <line key={i} x1={cx} y1={cy} x2={x} y2={y} stroke="#e0ded8" strokeWidth="1" />;
+    return <line key={i} x1={cx} y1={cy} x2={x} y2={y} stroke="var(--border)" strokeWidth="1" />;
   });
 
   // Data Polygon
@@ -1470,9 +1495,9 @@ function OverviewTab({ report }: { report: Report }) {
     const [x, y] = pt(i, R + 18);
     const anchor = x < cx - 5 ? 'end' : (x > cx + 5 ? 'start' : 'middle');
     return (
-      <text key={i} x={x} y={y + 4} textAnchor={anchor} fontSize="11" fill="#6b6860" fontFamily="DM Sans, sans-serif" fontWeight="600">
+      <text key={i} x={x} y={y + 4} textAnchor={anchor} fontSize="11" fill="var(--muted)" fontFamily="DM Sans, sans-serif" fontWeight="600">
         {d2.label}
-        <tspan x={x} dy="13" fontWeight="700" fill="#1a1916">{Math.min(d2.val, 100)}</tspan>
+        <tspan x={x} dy="13" fontWeight="700" fill="var(--ink)">{Math.min(d2.val, 100)}</tspan>
       </text>
     );
   });
@@ -1481,7 +1506,7 @@ function OverviewTab({ report }: { report: Report }) {
   const dots = dims.map((d2, i) => {
     const r = R * (Math.min(d2.val, 100) / 100);
     const [x, y] = pt(i, r);
-    return <circle key={i} cx={x} cy={y} r="4" fill={d2.color} stroke="#fff" strokeWidth="1.5" />;
+    return <circle key={i} cx={x} cy={y} r="4" fill={d2.color} stroke="var(--bg)" strokeWidth="1.5" />;
   });
 
   const sources = (report.sources && report.sources.filter(Boolean).length > 0)
@@ -1541,7 +1566,7 @@ function OverviewTab({ report }: { report: Report }) {
 }
 
 function PersonasTab({ report }: { report: Report }) {
-  const renderCard = (p: any, cls: string, bg: string, fg: string, emoji: string) => {
+  const renderCard = (p: Persona | undefined | null, cls: string, bg: string, fg: string, emoji: string) => {
     if (!p) return null;
     const goals = (p.goals || []).map((g: string, i: number) => <span key={i} className="ptag ptag-goal">{g}</span>);
     const pains = (p.pains || []).map((pain: string, i: number) => <span key={i} className="ptag ptag-pain">{pain}</span>);
@@ -1616,9 +1641,9 @@ function SwotTab({ report }: { report: Report }) {
           <rect x={P + iW / 2} y={P} width={iW / 2} height={iH / 2} fill="rgba(42,95,165,.06)" />
           <rect x={P} y={P + iH / 2} width={iW / 2} height={iH / 2} fill="rgba(217,119,6,.06)" />
           <rect x={P + iW / 2} y={P + iH / 2} width={iW / 2} height={iH / 2} fill="rgba(26,107,74,.06)" />
-          <line x1={P} y1={P + iH / 2} x2={P + iW} y2={P + iH / 2} stroke="#e0ded8" strokeWidth="1" strokeDasharray="4" />
-          <line x1={P + iW / 2} y1={P} x2={P + iW / 2} y2={P + iH} stroke="#e0ded8" strokeWidth="1" strokeDasharray="4" />
-          <rect x={P} y={P} width={iW} height={iH} fill="none" stroke="#e0ded8" strokeWidth="1" />
+          <line x1={P} y1={P + iH / 2} x2={P + iW} y2={P + iH / 2} stroke="var(--border)" strokeWidth="1" strokeDasharray="4" />
+          <line x1={P + iW / 2} y1={P} x2={P + iW / 2} y2={P + iH} stroke="var(--border)" strokeWidth="1" strokeDasharray="4" />
+          <rect x={P} y={P} width={iW} height={iH} fill="none" stroke="var(--border)" strokeWidth="1" />
           {dots}
           <text x={P + iW / 2} y={H - 6} textAnchor="middle" fontSize="10" fill="#a8a59e" fontWeight="600">Impact →</text>
           <text x="12" y={P + iH / 2} textAnchor="middle" fontSize="10" fill="#a8a59e" fontWeight="600" transform={`rotate(-90,12,${P + iH / 2})`}>Likelihood →</text>
@@ -1669,10 +1694,10 @@ function CompetitorsTab({ report, animate }: { report: Report; animate: boolean 
     <text key={i} x={PL - 6} y={scY(v) + 4} textAnchor="end" fontSize="10" fill="#a8a59e">{v}</text>
   ));
   const gridX = [25, 50, 75].map((v, i) => (
-    <line key={i} x1={scX(v)} y1={PT} x2={scX(v)} y2={PT + iH} stroke="#e0ded8" strokeWidth="1" strokeDasharray="3" />
+    <line key={i} x1={scX(v)} y1={PT} x2={scX(v)} y2={PT + iH} stroke="var(--border)" strokeWidth="1" strokeDasharray="3" />
   ));
   const gridY = [25, 50, 75].map((v, i) => (
-    <line key={i} x1={PL} y1={scY(v)} x2={PL + iW} y2={scY(v)} stroke="#e0ded8" strokeWidth="1" strokeDasharray="3" />
+    <line key={i} x1={PL} y1={scY(v)} x2={PL + iW} y2={scY(v)} stroke="var(--border)" strokeWidth="1" strokeDasharray="3" />
   ));
 
   return (
@@ -1683,7 +1708,7 @@ function CompetitorsTab({ report, animate }: { report: Report; animate: boolean 
             Competitive Positioning Map
           </div>
           <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', maxWidth: `${W}px`, height: 'auto' }} xmlns="http://www.w3.org/2000/svg">
-            <rect x={PL} y={PT} width={iW} height={iH} fill="none" stroke="#e0ded8" strokeWidth="1" />
+            <rect x={PL} y={PT} width={iW} height={iH} fill="none" stroke="var(--border)" strokeWidth="1" />
             {gridX}
             {gridY}
             {bubbles}
@@ -1820,7 +1845,7 @@ function MetricsTab({ report, animate }: { report: Report; animate: boolean }) {
     const r = 28, circ = 2 * Math.PI * r, fill = circ - (val / 100) * circ;
     return (
       <svg className="gauge-svg" viewBox="0 0 70 70" width="60" height="60">
-        <circle cx="35" cy="35" r={r} fill="none" stroke="#e0ded8" strokeWidth="7" />
+        <circle cx="35" cy="35" r={r} fill="none" stroke="var(--bg3)" strokeWidth="7" />
         <circle
           cx="35"
           cy="35"
@@ -1908,7 +1933,7 @@ function RiceTab({ report, animate }: { report: Report; animate: boolean }) {
                   { label: 'Reach', val: r.reach, max: 10 },
                   { label: 'Impact', val: r.impact, max: 3 },
                   { label: 'Confidence', val: r.confidence, max: 100 },
-                  { label: 'Effort', val: r.effort, max: 5, bg: '#e0ded8' }
+                  { label: 'Effort', val: r.effort, max: 5, bg: 'var(--border)' }
                 ].map((dim, idx) => {
                   const fillPct = Math.round((dim.val / dim.max) * 100);
                   return (
