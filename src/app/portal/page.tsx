@@ -385,7 +385,7 @@ export default function PortalPage() {
           <div className="logo-mark" style={{ background: 'none', border: '1.5px solid var(--ink)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', position: 'relative', overflow: 'hidden', width: '28px', height: '28px', borderRadius: '6px', flexShrink: 0 }}>
             <svg viewBox="0 0 100 100" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', opacity: 0.35 }}>
               <line x1="0" y1="50" x2="100" y2="50" stroke="currentColor" strokeWidth="6" strokeDasharray="10 6" />
-              <line x1="50" y1="0" x2="50" y2="100" stroke="currentColor" strokeWidth="6" stroke-dasharray="10 6" />
+              <line x1="50" y1="0" x2="50" y2="100" stroke="currentColor" strokeWidth="6" strokeDasharray="10 6" />
               <circle cx="50" cy="50" r="42" fill="none" stroke="currentColor" strokeWidth="6" strokeDasharray="8 8" />
             </svg>
             <span style={{ fontFamily: 'var(--fh)', fontWeight: 800, fontSize: '15px', color: 'var(--ink)', position: 'relative', zIndex: 1 }}>T</span>
@@ -750,11 +750,11 @@ function DashboardView({
         <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '20px' }} className="dash-charts-grid">
           <div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifySpace: 'space-between', padding: '6px 10px', background: 'rgba(26, 107, 74, 0.06)', borderRadius: '8px', border: '1px solid rgba(26, 107, 74, 0.15)', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', padding: '6px 10px', background: 'rgba(26, 107, 74, 0.06)', borderRadius: '8px', border: '1px solid rgba(26, 107, 74, 0.15)', justifyContent: 'space-between' }}>
                 <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--muted)' }}>Top Strength</span>
                 <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--acc2)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>💪 {topStrength}</span>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', justifySpace: 'space-between', padding: '6px 10px', background: 'rgba(190, 18, 60, 0.06)', borderRadius: '8px', border: '1px solid rgba(190, 18, 60, 0.15)', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', padding: '6px 10px', background: 'rgba(190, 18, 60, 0.06)', borderRadius: '8px', border: '1px solid rgba(190, 18, 60, 0.15)', justifyContent: 'space-between' }}>
                 <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--muted)' }}>Weakest Area</span>
                 <span style={{ fontSize: '12px', fontWeight: 700, color: '#be123c', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>⚠️ {weakestArea}</span>
               </div>

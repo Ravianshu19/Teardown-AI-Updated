@@ -331,7 +331,7 @@ export default function LandingPage() {
     // Fallback dictionary for top brands
     const brands: Record<string, string> = {
       notion: 'notion.so', figma: 'figma.com', stripe: 'stripe.com', slack: 'slack.com',
-      airbnb: 'airbnb.com', swiggy: 'swiggy.com', zomato: 'zomato.com', swiggy: 'swiggy.com',
+      airbnb: 'airbnb.com', swiggy: 'swiggy.com', zomato: 'zomato.com',
       netflix: 'netflix.com', spotify: 'spotify.com', linear: 'linear.app', razorpay: 'razorpay.com'
     };
     const key = Object.keys(brands).find(k => raw.includes(k));
