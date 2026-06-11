@@ -38,7 +38,8 @@ export async function POST(req: NextRequest) {
     const cols = ['ic-b', 'ic-o', 'ic-g'];
     user.team.push({
       initials: lowerEmail[0].toUpperCase(),
-      name: lowerEmail,
+      name: lowerEmail.split('@')[0],
+      email: lowerEmail,
       role: 'member',
       tears: 0,
       lastActive: 'Invited',

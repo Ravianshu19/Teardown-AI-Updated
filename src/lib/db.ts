@@ -1,63 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-
-// Types representing the database schema
-export interface Report {
-  id?: string;
-  name: string;
-  score: number;
-  score_ux: number;
-  score_market: number;
-  score_moat: number;
-  score_growth: number;
-  score_revenue: number;
-  score_retention: number;
-  date: string;
-  ts: number;
-  domain?: string;
-  col: string;
-  saved: boolean;
-  note: string;
-  tagline?: string;
-  problem?: string;
-  users?: string;
-  value?: string;
-  revenue?: string;
-  strengths?: string[];
-  weaknesses?: string[];
-  opportunities?: string[];
-  threats?: string[];
-  persona_primary?: any;
-  persona_secondary?: any;
-  journey?: any[];
-  metrics?: any[];
-  rice?: any[];
-  prd?: any;
-  features?: string[];
-  isComparison?: boolean;
-}
-
-export interface TeamMember {
-  initials: string;
-  name: string;
-  role: string;
-  tears: number;
-  lastActive: string;
-  col: string;
-}
-
-export interface User {
-  name: string;
-  email: string;
-  passwordHash: string;
-  salt: string;
-  token?: string;
-  plan: string;
-  credits: number;
-  maxCreds: number;
-  reports: Report[];
-  team: TeamMember[];
-}
+import { Report, TeamMember, User } from './types';
 
 // ────────────────────────────────────────────────────────────────
 // LOCAL FILE DATABASE ADAPTER
@@ -86,20 +29,22 @@ function saveLocalDB(data: { users: Record<string, User> }) {
 }
 
 // ────────────────────────────────────────────────────────────────
-// MONGODB ADAPTER (Lazy Loaded)
+// MONGODB ADAPTER (Lazy Loaded & Globally Cached)
 // ────────────────────────────────────────────────────────────────
 
-let cachedMongoClient: any = null;
+const globalWithMongo = global as typeof globalThis & {
+  _mongoClient?: any;
+};
 
 async function getMongoClient() {
-  if (cachedMongoClient) return cachedMongoClient;
+  if (globalWithMongo._mongoClient) return globalWithMongo._mongoClient;
   const uri = process.env.MONGODB_URI;
   if (!uri) throw new Error('MONGODB_URI not configured.');
 
   const { MongoClient } = await import('mongodb');
   const client = new MongoClient(uri);
   await client.connect();
-  cachedMongoClient = client;
+  globalWithMongo._mongoClient = client;
   return client;
 }
 
@@ -201,8 +146,14 @@ export const db = {
     const user = local.users[lowerEmail];
     if (!user) return null;
 
-    local.users[lowerEmail] = { ...user, ...updates };
+    const updatedUser = { ...user, ...updates };
+    const nextEmail = updatedUser.email.toLowerCase().trim();
+    
+    if (nextEmail !== lowerEmail) {
+      delete local.users[lowerEmail];
+    }
+    local.users[nextEmail] = updatedUser;
     saveLocalDB(local);
-    return local.users[lowerEmail];
+    return local.users[nextEmail];
   }
 };

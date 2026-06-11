@@ -23,35 +23,10 @@ import {
   ChevronRight,
   Send,
   UserCheck,
-  AlertTriangle
+  AlertTriangle,
+  Activity
 } from 'lucide-react';
-
-interface Report {
-  id?: string;
-  name: string;
-  score: number;
-  score_ux: number;
-  score_market: number;
-  score_moat: number;
-  score_growth: number;
-  score_revenue: number;
-  score_retention: number;
-  date: string;
-  ts: number;
-  domain?: string;
-  col: string;
-  saved: boolean;
-  note: string;
-}
-
-interface TeamMember {
-  initials: string;
-  name: string;
-  role: string;
-  tears: number;
-  lastActive: string;
-  col: string;
-}
+import { Report, TeamMember } from '@/lib/types';
 
 interface UserState {
   name: string;
@@ -73,6 +48,7 @@ export default function PortalPage() {
   const [user, setUser] = useState<UserState | null>(null);
   const [reports, setReports] = useState<Report[]>([]);
   const [activeView, setActiveView] = useState<string>('dashboard');
+  const [razorpayKey, setRazorpayKey] = useState<string>('');
 
   // Mobile navigation
   const [isMobNavOpen, setIsMobNavOpen] = useState(false);
@@ -151,6 +127,7 @@ export default function PortalPage() {
       }
 
       const sessionData = await res.json();
+      setRazorpayKey(sessionData.razorpayKey || '');
       setUser({
         name: sessionData.name,
         email: sessionData.email,
@@ -288,62 +265,137 @@ export default function PortalPage() {
     }
   };
 
-  // Simulated upgrade payments (Razorpay signatures verification)
+  // Upgrade payments (Razorpay checkout integration with simulation fallback)
   const handleBuyPlan = async (planName: string) => {
     if (!token) {
       showToast('Sign in to upgrade.', 'warn');
       return;
     }
 
-    showToast('Initiating checkout (Razorpay simulated)...', 'ok');
-    
-    setTimeout(async () => {
-      const razorpay_order_id = 'order_' + Math.random().toString(36).substring(2, 10);
-      const razorpay_payment_id = 'pay_' + Math.random().toString(36).substring(2, 10);
-      const razorpay_signature = 'sig_mock_signature';
+    const normalizedPlan = planName.toLowerCase();
+    if (normalizedPlan === 'free') {
+      verifyPaymentOnServer('order_free_downgrade', 'pay_free_downgrade', 'sig_mock_signature', 'free');
+      return;
+    }
+
+    // Real Razorpay modal open if script is loaded and key is configured
+    if (typeof window !== 'undefined' && (window as any).Razorpay && razorpayKey) {
+      const amount = planName === 'pro' ? 149900 : 19900; // in paise
+      const description = planName === 'pro' ? 'Pro Subscription — Unlimited credits' : 'Student Subscription — 15 credits';
+
+      const options = {
+        key: razorpayKey,
+        amount: amount,
+        currency: 'INR',
+        name: 'TeardownAI',
+        description: description,
+        prefill: {
+          name: user?.name || '',
+          email: user?.email || '',
+        },
+        theme: { color: '#d4520a' },
+        handler: async function (response: any) {
+          const paymentId = response.razorpay_payment_id;
+          const orderId = response.razorpay_order_id || 'order_' + Math.random().toString(36).substring(2, 10);
+          const signature = response.razorpay_signature || 'sig_mock_signature';
+
+          verifyPaymentOnServer(orderId, paymentId, signature, planName);
+        },
+        modal: {
+          ondismiss: () => showToast('Payment cancelled', ''),
+        }
+      };
 
       try {
-        const res = await fetch('/api/verify-payment', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`
-          },
-          body: JSON.stringify({
-            razorpay_order_id,
-            razorpay_payment_id,
-            razorpay_signature,
-            plan: planName
-          })
-        });
-        const data = await res.json();
-        if (data.verified) {
-          setUser(prev => prev ? { ...prev, plan: data.plan, credits: data.credits, maxCreds: data.maxCreds } : null);
-          showToast(`Upgraded to ${data.plan} successfully!`, 'ok');
-        } else {
-          showToast('Payment verification failed.', 'warn');
-        }
+        const rzp = new (window as any).Razorpay(options);
+        rzp.open();
       } catch (err) {
-        showToast('Payment verification failed.', 'warn');
+        console.error('Razorpay modal error:', err);
+        showToast('Failed to open payment gateway.', 'warn');
       }
-    }, 1500);
-  };
-
-  // Settings save handler
-  const handleSaveSetting = (key: 'name' | 'email') => {
-    if (key === 'name') {
-      setUser(prev => prev ? { ...prev, name: setFieldUsername } : null);
-      showToast('Name saved!', 'ok');
     } else {
-      setUser(prev => prev ? { ...prev, email: setFieldEmail } : null);
-      showToast('Email updated!', 'ok');
+      // Simulation Fallback
+      showToast('Initiating checkout (Razorpay simulated)...', 'ok');
+      setTimeout(async () => {
+        const razorpay_order_id = 'order_' + Math.random().toString(36).substring(2, 10);
+        const razorpay_payment_id = 'pay_' + Math.random().toString(36).substring(2, 10);
+        const razorpay_signature = 'sig_mock_signature';
+
+        verifyPaymentOnServer(razorpay_order_id, razorpay_payment_id, razorpay_signature, planName);
+      }, 1500);
     }
   };
 
-  // Clear session history local reports
-  const handleClearHistory = () => {
-    setReports([]);
-    showToast('History cleared');
+  const verifyPaymentOnServer = async (orderId: string, paymentId: string, signature: string, planName: string) => {
+    try {
+      const res = await fetch('/api/verify-payment', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          razorpay_order_id: orderId,
+          razorpay_payment_id: paymentId,
+          razorpay_signature: signature,
+          plan: planName
+        })
+      });
+      const data = await res.json();
+      if (data.verified) {
+        setUser(prev => prev ? { ...prev, plan: data.plan, credits: data.credits, maxCreds: data.maxCreds } : null);
+        showToast(`Upgraded to ${data.plan} successfully!`, 'ok');
+      } else {
+        showToast('Payment verification failed.', 'warn');
+      }
+    } catch (err) {
+      showToast('Payment verification failed.', 'warn');
+    }
+  };
+
+  // Settings save handler (persisted on server)
+  const handleSaveSetting = async (key: 'name' | 'email') => {
+    if (!token) return;
+    const payload = key === 'name' ? { name: setFieldUsername } : { email: setFieldEmail };
+    try {
+      const res = await fetch('/api/session', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify(payload)
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setUser(prev => prev ? { ...prev, name: data.name, email: data.email } : null);
+        showToast(key === 'name' ? 'Name saved!' : 'Email updated!', 'ok');
+      } else {
+        const err = await res.json();
+        showToast(err.error || 'Failed to save settings.', 'warn');
+      }
+    } catch (err) {
+      showToast('Error saving settings.', 'warn');
+    }
+  };
+
+  // Clear session history (persisted on server)
+  const handleClearHistory = async () => {
+    if (!token) return;
+    try {
+      const res = await fetch('/api/reports', {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        setReports([]);
+        showToast('History cleared', 'ok');
+      } else {
+        showToast('Failed to clear history on server.', 'warn');
+      }
+    } catch (err) {
+      showToast('Error clearing history.', 'warn');
+    }
   };
 
   // Nav menu actions
@@ -358,8 +410,8 @@ export default function PortalPage() {
     { key: 'settings', label: 'Settings', icon: <Settings size={16} /> }
   ];
 
-  // Filter menu choices (only developer sees team option)
-  const isDeveloper = user?.email?.toLowerCase().includes('developer');
+  // Filter menu choices (only developer or Pro plan sees team option)
+  const isDeveloper = user?.plan === 'Pro' || user?.email?.toLowerCase().includes('developer');
   const visibleMenu = menuOptions.filter(opt => !opt.devOnly || isDeveloper);
 
   const getScoreColor = (s: number) => {
@@ -552,6 +604,7 @@ export default function PortalPage() {
                 <BillingView
                   user={user}
                   handleBuyPlan={handleBuyPlan}
+                  router={router}
                 />
               )}
               {activeView === 'settings' && (
@@ -611,7 +664,7 @@ function DashboardView({
   const saved = reports.filter(r => r.saved).length;
   const credits = user ? user.credits : 10;
   const maxCreds = user ? user.maxCreds : 10;
-  const pct = Math.round(((maxCreds - credits) / maxCreds) * 100);
+  const pct = maxCreds > 0 ? Math.round(((maxCreds - credits) / maxCreds) * 100) : 0;
   const today = reports.filter(r => r.ts > Date.now() - 86400000).length;
 
   // Portfolio Diagnostics
@@ -842,7 +895,7 @@ function DashboardView({
         {reports.length > 0 ? (
           reports.slice(0, 5).map((r, idx) => (
             <ReportItemRow
-              key={idx}
+              key={r.id || idx}
               report={r}
               reports={reports}
               getScoreColor={getScoreColor}
@@ -913,7 +966,7 @@ function ReportsView({
         {sorted.length > 0 ? (
           sorted.map((r, idx) => (
             <ReportItemRow
-              key={idx}
+              key={r.id || idx}
               report={r}
               reports={reports}
               getScoreColor={getScoreColor}
@@ -951,7 +1004,7 @@ function SavedView({
         {savedItems.length > 0 ? (
           savedItems.map((r, idx) => (
             <ReportItemRow
-              key={idx}
+              key={r.id || idx}
               report={r}
               reports={reports}
               getScoreColor={getScoreColor}
@@ -998,14 +1051,14 @@ function TeamView({
         {members.map((m, idx) => {
           const isYou = idx === 0;
           return (
-            <div key={idx} className="ti">
+            <div key={m.email || idx} className="ti">
               <div className="ti-l">
                 <div className={`ti-icon ${m.col}`} style={{ fontSize: '12px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   {m.initials}
                 </div>
                 <div className="ti-info">
                   <div className="ti-name">{m.name}{isYou ? ' (You)' : ''}</div>
-                  <div className="ti-date">{m.tears} teardowns · {m.lastActive}</div>
+                  <div className="ti-date">{m.email || m.name} · {m.tears} teardowns · {m.lastActive}</div>
                 </div>
               </div>
               <div className="ti-r">
@@ -1016,7 +1069,7 @@ function TeamView({
                     <button className="ti-btn" onClick={() => showToast(`Invite resent to ${m.name.split(' ')[0]}`)}>
                       <Send size={13} />
                     </button>
-                    <button className="ti-btn" style={{ color: '#be123c' }} onClick={() => handleRemoveTeamMember(m.name)}>
+                    <button className="ti-btn" style={{ color: '#be123c' }} onClick={() => handleRemoveTeamMember(m.email || m.name)}>
                       <Trash2 size={13} />
                     </button>
                   </div>
@@ -1077,7 +1130,7 @@ function HistoryView({
             <div className="tlist">
               {items.map((r, itemIdx) => (
                 <ReportItemRow
-                  key={itemIdx}
+                  key={r.id || itemIdx}
                   report={r}
                   reports={reports}
                   getScoreColor={getScoreColor}
@@ -1107,7 +1160,7 @@ function ExportsView({ reports, router, exportPDF }: { reports: Report[]; router
           reports.slice(0, 5).map((h, i) => {
             const init = (h.name || '?').charAt(0).toUpperCase();
             return (
-              <div key={i} className="ti">
+              <div key={h.id || i} className="ti">
                 <div className="ti-l">
                   <div className={`ti-icon ${cols[i % 3]}`} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     {h.domain ? (
@@ -1149,11 +1202,11 @@ function ExportsView({ reports, router, exportPDF }: { reports: Report[]; router
   );
 }
 
-function BillingView({ user, handleBuyPlan }: { user: UserState | null; handleBuyPlan: (p: string) => void }) {
+function BillingView({ user, handleBuyPlan, router }: { user: UserState | null; handleBuyPlan: (p: string) => void; router: any }) {
   const credits = user ? user.credits : 10;
   const maxCreds = user ? user.maxCreds : 10;
   const used = maxCreds - credits;
-  const pct = Math.round((used / maxCreds) * 100);
+  const pct = maxCreds > 0 ? Math.round((used / maxCreds) * 100) : 0;
 
   const planPrice = user?.plan === 'Pro' ? '₹1,499/mo' : (user?.plan === 'Student' ? '₹199/mo' : 'Free');
   const planRenew = user?.plan !== 'Free' ? new Date(Date.now() + 30 * 24 * 3600 * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Never';

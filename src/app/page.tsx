@@ -25,50 +25,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { PRODUCT_DB } from '@/lib/products';
-
-interface Competitor {
-  name: string;
-  threat: string;
-  ux: number;
-  features: number;
-  pricing: number;
-  market: number;
-}
-
-interface Report {
-  id?: string;
-  name: string;
-  tagline?: string;
-  problem?: string;
-  users?: string;
-  value?: string;
-  revenue?: string;
-  competitors?: Competitor[];
-  score: number;
-  score_ux: number;
-  score_market: number;
-  score_moat: number;
-  score_growth: number;
-  score_revenue: number;
-  score_retention: number;
-  strengths?: string[];
-  weaknesses?: string[];
-  opportunities?: string[];
-  threats?: string[];
-  persona_primary?: any;
-  persona_secondary?: any;
-  journey?: any[];
-  metrics?: any[];
-  rice?: any[];
-  prd?: any;
-  features?: string[];
-  date: string;
-  ts: number;
-  domain?: string;
-  col: string;
-  saved: boolean;
-  note: string;
-}
+import { Report, Competitor, TeamMember } from '@/lib/types';
 
 interface UserState {
   name: string;
@@ -76,7 +33,7 @@ interface UserState {
   plan: string;
   credits: number;
   maxCreds: number;
-  team: any[];
+  team: TeamMember[];
 }
 
 export default function LandingPage() {
