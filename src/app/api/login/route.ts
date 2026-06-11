@@ -3,7 +3,7 @@ import crypto from 'crypto';
 import { db } from '@/lib/db';
 
 function hashPassword(password: string, salt: string) {
-  return crypto.pbkdf2Sync(password, salt, 1000, 64, 'sha512').toString('hex');
+  return crypto.pbkdf2Sync(password, salt, 600000, 64, 'sha512').toString('hex');
 }
 
 export async function POST(req: NextRequest) {

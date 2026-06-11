@@ -46,7 +46,19 @@ export async function POST(req: NextRequest) {
 
     // Decrement user credit only if this is a new report (not an update/re-save)
     const existingReports = user.reports || [];
-    const isNewReport = !existingReports.some((r: any) => r.id === report.id || r.name.toLowerCase() === report.name.toLowerCase());
+    const existing = existingReports.find((r: any) => r.id === report.id || r.name.toLowerCase() === report.name.toLowerCase());
+    const isNewReport = !existing;
+
+    if (existing) {
+      if (!report.note && existing.note) {
+        report.note = existing.note;
+      }
+      if (report.saved === undefined || report.saved === false) {
+        if (existing.saved) {
+          report.saved = existing.saved;
+        }
+      }
+    }
 
     if (user.credits === undefined) user.credits = 10;
     if (isNewReport && user.credits > 0 && user.plan !== 'Pro') {

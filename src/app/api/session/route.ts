@@ -67,3 +67,23 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Server error during profile update.' }, { status: 500 });
   }
 }
+
+export async function DELETE(req: NextRequest) {
+  try {
+    const authHeader = req.headers.get('authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
+    }
+    const token = authHeader.split(' ')[1];
+    const user = await db.getUserByToken(token);
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
+    }
+
+    await db.deleteUser(user.email);
+    return NextResponse.json({ success: true });
+  } catch (err: any) {
+    console.error('API session DELETE error:', err.message);
+    return NextResponse.json({ error: 'Server error during account deletion.' }, { status: 500 });
+  }
+}

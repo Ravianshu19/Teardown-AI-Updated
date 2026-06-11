@@ -22,6 +22,7 @@ export async function POST(req: NextRequest) {
       {
         initials: user.name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2),
         name: user.name + ' (Admin)',
+        email: user.email,
         role: 'admin',
         tears: 0,
         lastActive: 'Online now',
@@ -30,7 +31,7 @@ export async function POST(req: NextRequest) {
     ];
 
     const lowerEmail = email.toLowerCase().trim();
-    const exists = user.team.some(m => m.name.toLowerCase() === lowerEmail);
+    const exists = user.team.some(m => m.email?.toLowerCase() === lowerEmail || m.name.toLowerCase() === lowerEmail);
     if (exists) {
       return NextResponse.json({ error: 'Member already in team.' }, { status: 400 });
     }

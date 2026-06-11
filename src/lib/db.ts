@@ -155,5 +155,24 @@ export const db = {
     local.users[nextEmail] = updatedUser;
     saveLocalDB(local);
     return local.users[nextEmail];
+  },
+
+  async deleteUser(email: string): Promise<void> {
+    const lowerEmail = email.toLowerCase().trim();
+
+    if (this.isCloud()) {
+      try {
+        const col = await getMongoCollection();
+        await col.deleteOne({ email: lowerEmail });
+        return;
+      } catch (err) {
+        console.error('MongoDB deleteUser error, falling back:', err);
+      }
+    }
+
+    // Local Fallback
+    const local = loadLocalDB();
+    delete local.users[lowerEmail];
+    saveLocalDB(local);
   }
 };

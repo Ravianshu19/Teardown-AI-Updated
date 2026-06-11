@@ -398,6 +398,32 @@ export default function PortalPage() {
     }
   };
 
+  // Delete user account permanently
+  const handleDeleteAccount = async () => {
+    if (!token) return;
+    if (!window.confirm('Are you absolutely sure you want to permanently delete your account? This action cannot be undone.')) {
+      return;
+    }
+    try {
+      const res = await fetch('/api/session', {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        localStorage.removeItem('auth_token');
+        setUser(null);
+        showToast('Account deleted successfully.', 'ok');
+        setTimeout(() => {
+          router.push('/');
+        }, 1500);
+      } else {
+        showToast('Failed to delete account.', 'warn');
+      }
+    } catch (err) {
+      showToast('Error deleting account.', 'warn');
+    }
+  };
+
   // Nav menu actions
   const menuOptions = [
     { key: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={16} /> },
@@ -619,6 +645,7 @@ export default function PortalPage() {
                   reportsLength={reports.length}
                   handleClearHistory={handleClearHistory}
                   handleSaveSetting={handleSaveSetting}
+                  handleDeleteAccount={handleDeleteAccount}
                   showToast={showToast}
                 />
               )}
@@ -893,9 +920,9 @@ function DashboardView({
       <div className="p-title" style={{ marginBottom: '10px' }}>Recent teardowns</div>
       <div className="tlist">
         {reports.length > 0 ? (
-          reports.slice(0, 5).map((r, idx) => (
+          reports.slice(0, 5).map((r) => (
             <ReportItemRow
-              key={r.id || idx}
+              key={r.id}
               report={r}
               reports={reports}
               getScoreColor={getScoreColor}
@@ -964,9 +991,9 @@ function ReportsView({
       </div>
       <div className="tlist" id="report-list">
         {sorted.length > 0 ? (
-          sorted.map((r, idx) => (
+          sorted.map((r) => (
             <ReportItemRow
-              key={r.id || idx}
+              key={r.id}
               report={r}
               reports={reports}
               getScoreColor={getScoreColor}
@@ -1002,9 +1029,9 @@ function SavedView({
       <div className="p-title">Saved <span style={{ fontSize: '13px', fontWeight: 400, color: 'var(--muted)' }}>({savedItems.length})</span></div>
       <div className="tlist">
         {savedItems.length > 0 ? (
-          savedItems.map((r, idx) => (
+          savedItems.map((r) => (
             <ReportItemRow
-              key={r.id || idx}
+              key={r.id}
               report={r}
               reports={reports}
               getScoreColor={getScoreColor}
@@ -1128,9 +1155,9 @@ function HistoryView({
               {lbl}
             </div>
             <div className="tlist">
-              {items.map((r, itemIdx) => (
+              {items.map((r) => (
                 <ReportItemRow
-                  key={r.id || itemIdx}
+                  key={r.id}
                   report={r}
                   reports={reports}
                   getScoreColor={getScoreColor}
@@ -1160,7 +1187,7 @@ function ExportsView({ reports, router, exportPDF }: { reports: Report[]; router
           reports.slice(0, 5).map((h, i) => {
             const init = (h.name || '?').charAt(0).toUpperCase();
             return (
-              <div key={h.id || i} className="ti">
+              <div key={h.id} className="ti">
                 <div className="ti-l">
                   <div className={`ti-icon ${cols[i % 3]}`} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     {h.domain ? (
@@ -1257,6 +1284,7 @@ function SettingsView({
   reportsLength,
   handleClearHistory,
   handleSaveSetting,
+  handleDeleteAccount,
   showToast
 }: {
   user: UserState | null;
@@ -1269,6 +1297,7 @@ function SettingsView({
   reportsLength: number;
   handleClearHistory: () => void;
   handleSaveSetting: (k: 'name' | 'email') => void;
+  handleDeleteAccount: () => void;
   showToast: (m: string) => void;
 }) {
   return (
@@ -1325,7 +1354,7 @@ function SettingsView({
             </div>
           </div>
           <div className="ti-r">
-            <button className="ti-btn" onClick={() => showToast('Contact support to delete your account')} style={{ color: '#be123c', borderColor: '#f5c3c3' }}>Delete</button>
+            <button className="ti-btn" onClick={handleDeleteAccount} style={{ color: '#be123c', borderColor: '#f5c3c3' }}>Delete</button>
           </div>
         </div>
       </div>
@@ -1353,9 +1382,6 @@ function ReportItemRow({
   router: any;
 }) {
   const initial = (report.name || '?').charAt(0).toUpperCase();
-  const starPath = report.saved
-    ? 'M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z'
-    : 'M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z';
 
   return (
     <div className="ti">
@@ -1390,9 +1416,7 @@ function ReportItemRow({
             <ExternalLink size={13} />
           </button>
           <button className="ti-btn" title={report.saved ? 'Unsave' : 'Save'} onClick={() => toggleSaveReport(report)}>
-            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24">
-              <path d={starPath} fill={report.saved ? '#d4a017' : 'none'} stroke={report.saved ? '#d4a017' : 'currentColor'} strokeWidth={report.saved ? '1' : '2'} />
-            </svg>
+            <Star size={13} fill={report.saved ? '#d4a017' : 'none'} color={report.saved ? '#d4a017' : 'currentColor'} />
           </button>
           <button className="ti-btn" title="Delete" onClick={() => handleDeleteReport(report)} style={{ color: '#be123c' }}>
             <Trash2 size={13} />

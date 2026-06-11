@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
     }
 
     const RZP_SEC = process.env.RAZORPAY_KEY_SECRET;
-    const isMock = razorpay_signature === 'sig_mock_signature';
+    const isMock = razorpay_signature === 'sig_mock_signature' && process.env.NODE_ENV === 'development';
 
     let isVerified = false;
     if (isMock) {
