@@ -382,7 +382,7 @@ export default function LandingPage() {
 
     // Curated/Offline path
     if (isCurated) {
-      setTimeout(() => {
+      setTimeout(async () => {
         const foundKey = curatedKeys.find(k => qKey === k || qKey.includes(k) || k.includes(qKey)) || 'notion';
         const rawItem = PRODUCT_DB[foundKey];
         
@@ -623,7 +623,7 @@ Ensure all numerical scores and ratings are realistic (0-100). Competitor arrays
         showToast(`AI Engine Error: ${err.message} (Running offline fallback)`, 'warn');
         
         // Local simulation fallback
-        setTimeout(() => {
+        setTimeout(async () => {
           const mockReport: Report = {
             name: name,
             tagline: `AI generated PM blueprint for ${name}`,
