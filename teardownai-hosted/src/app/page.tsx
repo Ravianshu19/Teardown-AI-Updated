@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Sun,
@@ -25,50 +25,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { PRODUCT_DB } from '@/lib/products';
-
-interface Competitor {
-  name: string;
-  threat: string;
-  ux: number;
-  features: number;
-  pricing: number;
-  market: number;
-}
-
-interface Report {
-  id?: string;
-  name: string;
-  tagline?: string;
-  problem?: string;
-  users?: string;
-  value?: string;
-  revenue?: string;
-  competitors?: Competitor[];
-  score: number;
-  score_ux: number;
-  score_market: number;
-  score_moat: number;
-  score_growth: number;
-  score_revenue: number;
-  score_retention: number;
-  strengths?: string[];
-  weaknesses?: string[];
-  opportunities?: string[];
-  threats?: string[];
-  persona_primary?: any;
-  persona_secondary?: any;
-  journey?: any[];
-  metrics?: any[];
-  rice?: any[];
-  prd?: any;
-  features?: string[];
-  date: string;
-  ts: number;
-  domain?: string;
-  col: string;
-  saved: boolean;
-  note: string;
-}
+import { Report, Competitor, TeamMember, Persona } from '@/lib/types';
 
 interface UserState {
   name: string;
@@ -76,7 +33,7 @@ interface UserState {
   plan: string;
   credits: number;
   maxCreds: number;
-  team: any[];
+  team: TeamMember[];
 }
 
 export default function LandingPage() {
@@ -131,9 +88,14 @@ export default function LandingPage() {
 
   const notesRef = useRef<HTMLTextAreaElement>(null);
   const analyzerRef = useRef<HTMLDivElement>(null);
+  const initRef = useRef(false);
+  const [stats, setStats] = useState({ teardowns: '14,000+', users: '5,400+' });
 
   // Load configuration and session
   useEffect(() => {
+    if (initRef.current) return;
+    initRef.current = true;
+
     // Theme
     const savedTheme = localStorage.getItem('theme') || 'dark';
     setTheme(savedTheme as 'light' | 'dark');
@@ -144,6 +106,14 @@ export default function LandingPage() {
     if (savedToken) {
       setToken(savedToken);
       fetchSession(savedToken);
+    } else {
+      // Guest path: trigger immediately since there's no session to wait for
+      const params = new URLSearchParams(window.location.search);
+      const queryQ = params.get('q');
+      if (queryQ) {
+        setSearchQuery(queryQ);
+        triggerAnalysis(queryQ, null, null);
+      }
     }
 
     // URL Query Routing
@@ -152,15 +122,20 @@ export default function LandingPage() {
       setIsAuthModalOpen(true);
       setAuthTab('login');
     }
-    const queryQ = params.get('q');
-    if (queryQ) {
-      setSearchQuery(queryQ);
-      // Auto run analysis after brief delay to allow page loads
-      setTimeout(() => {
-        triggerAnalysis(queryQ, savedToken);
-      }, 500);
-    }
-  }, []);
+
+    // Dynamic stats
+    fetch('/api/stats')
+      .then(res => res.json())
+      .then(data => {
+        if (data.teardowns && data.users) {
+          setStats({
+            teardowns: data.teardowns.toLocaleString() + '+',
+            users: data.users.toLocaleString() + '+'
+          });
+        }
+      })
+      .catch(() => {});
+  }, [fetchSession, triggerAnalysis]);
 
   // Sync theme to body
   const toggleTheme = () => {
@@ -171,43 +146,18 @@ export default function LandingPage() {
   };
 
   // Toast Helper
-  const showToast = (msg: string, type: string = 'ok') => {
+  const showToast = useCallback((msg: string, type: string = 'ok') => {
     const id = Date.now().toString() + Math.random().toString(36).substring(2, 5);
     setToasts(prev => [...prev, { id, msg, type }]);
     setTimeout(() => {
       setToasts(prev => prev.filter(t => t.id !== id));
     }, 3200);
-  };
+  }, []);
 
-  // Session API Call
-  const fetchSession = async (authToken: string) => {
-    try {
-      const res = await fetch('/api/session', {
-        headers: { Authorization: `Bearer ${authToken}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setUser({
-          name: data.name,
-          email: data.email,
-          plan: data.plan,
-          credits: data.credits,
-          maxCreds: data.maxCreds,
-          team: data.team || []
-        });
-        fetchReports(authToken);
-      } else {
-        localStorage.removeItem('auth_token');
-        setToken(null);
-        setUser(null);
-      }
-    } catch (err) {
-      console.error('Session validation error:', err);
-    }
-  };
+
 
   // Fetch Reports list
-  const fetchReports = async (authToken: string) => {
+  const fetchReports = useCallback(async (authToken: string) => {
     try {
       const res = await fetch('/api/reports', {
         headers: { Authorization: `Bearer ${authToken}` }
@@ -219,7 +169,7 @@ export default function LandingPage() {
     } catch (err) {
       console.error('Fetch reports error:', err);
     }
-  };
+  }, []);
 
   // Authentication Submission
   const handleAuthSubmit = async (e: React.FormEvent, type: 'login' | 'register') => {
@@ -256,10 +206,12 @@ export default function LandingPage() {
       // Fetch latest reports
       fetchReports(data.token);
       
-      // Redirect to portal
-      setTimeout(() => {
-        router.push('/portal');
-      }, 500);
+      // Redirect to portal only if NOT mid-analysis
+      if (!currentReport && !isRunning) {
+        setTimeout(() => {
+          router.push('/portal');
+        }, 500);
+      }
 
     } catch (err: any) {
       showToast('Error during connection.', 'warn');
@@ -331,7 +283,7 @@ export default function LandingPage() {
     // Fallback dictionary for top brands
     const brands: Record<string, string> = {
       notion: 'notion.so', figma: 'figma.com', stripe: 'stripe.com', slack: 'slack.com',
-      airbnb: 'airbnb.com', swiggy: 'swiggy.com', zomato: 'zomato.com', swiggy: 'swiggy.com',
+      airbnb: 'airbnb.com', swiggy: 'swiggy.com', zomato: 'zomato.com',
       netflix: 'netflix.com', spotify: 'spotify.com', linear: 'linear.app', razorpay: 'razorpay.com'
     };
     const key = Object.keys(brands).find(k => raw.includes(k));
@@ -339,7 +291,11 @@ export default function LandingPage() {
   };
 
   // Analysis engine trigger
-  const triggerAnalysis = async (queryVal: string, activeAuthToken: string | null = token) => {
+  const triggerAnalysis = useCallback(async (
+    queryVal: string,
+    activeAuthToken: string | null = token,
+    overrideUser: any = null
+  ) => {
     if (isRunning) return;
     const name = queryVal.trim();
     if (!name) {
@@ -347,8 +303,9 @@ export default function LandingPage() {
       return;
     }
 
+    const activeUser = overrideUser || user;
     // Credits checking
-    if (user && user.plan !== 'Pro' && user.credits <= 0) {
+    if (activeUser && activeUser.plan !== 'Pro' && activeUser.credits <= 0) {
       showToast('Out of credits! Please upgrade your plan or log in to continue.', 'warn');
       document.getElementById('pricing')?.scrollIntoView({ behavior: 'smooth' });
       return;
@@ -440,18 +397,32 @@ export default function LandingPage() {
           note: ''
         };
 
-        // Simulated credit deduct
-        let nextCredits = user ? user.credits : 10;
-        if (user && user.plan !== 'Pro' && nextCredits > 0) {
-          nextCredits--;
+        // Post to database to decrement credit and save history
+        let savedCredits = activeUser ? activeUser.credits : 10;
+        if (activeAuthToken) {
+          try {
+            const saveRes = await fetch('/api/reports', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${activeAuthToken}`
+              },
+              body: JSON.stringify(mockReport)
+            });
+            if (saveRes.ok) {
+              const saveData = await saveRes.json();
+              savedCredits = saveData.credits !== undefined ? saveData.credits : savedCredits;
+            }
+          } catch (e) {
+            console.error('Error saving curated report:', e);
+          }
         }
 
-        // If credits left goes to exactly 2, alert user
-        if (user && user.plan !== 'Pro' && nextCredits <= 2 && nextCredits > 0) {
-          showToast(`${nextCredits} credits left — upgrade for unlimited.`, 'warn');
+        if (activeUser && activeUser.plan !== 'Pro' && savedCredits <= 2 && savedCredits > 0) {
+          showToast(`${savedCredits} credits left — upgrade for unlimited.`, 'warn');
         }
 
-        finishAnalysis(mockReport, nextCredits);
+        finishAnalysis(mockReport, savedCredits);
       }, stepDelay * 7);
 
     } else {
@@ -567,13 +538,17 @@ The JSON object must strictly match the following structure:
     "Core Feature 3 Name",
     "Core Feature 4 Name",
     "Core Feature 5 Name"
+  ],
+  "sources": [
+    "Source 1 Name or Domain (e.g. Reddit r/productmanagement)",
+    "Source 2 Name or Domain (e.g. G2 Reviews)",
+    "Source 3 Name or Domain (e.g. Company Help Center)"
   ]
 }
 
-Ensure all numerical scores and ratings are realistic (0-100). Competitor arrays must contain exactly 5 competitors. Strengths, weaknesses, opportunities, threats lists must contain exactly 3 items. Features must contain exactly 5 items. Acceptance criteria must contain exactly 4 items, success metrics exactly 3, and open questions exactly 2. All journey stages must be in the correct order: Discovery, Onboarding, Activation, Retention, Referral.`;
+Ensure all numerical scores and ratings are realistic (0-100). Competitor arrays must contain exactly 5 competitors. Strengths, weaknesses, opportunities, threats lists must contain exactly 3 items. Features must contain exactly 5 items. Sources must contain exactly 3 items. Acceptance criteria must contain exactly 4 items, success metrics exactly 3, and open questions exactly 2. All journey stages must be in the correct order: Discovery, Onboarding, Activation, Retention, Referral.`;
 
       const payload = {
-        model: 'claude-3-5-sonnet-20241022',
         max_tokens: 4000,
         system: systemPrompt,
         messages: [{ role: 'user', content: `Generate a detailed product teardown for the product or URL: "${name}".` }]
@@ -621,7 +596,7 @@ Ensure all numerical scores and ratings are realistic (0-100). Competitor arrays
         };
 
         // Post to database to decrement credit and save history
-        let savedCredits = user ? user.credits : 10;
+        let savedCredits = activeUser ? activeUser.credits : 10;
         if (activeAuthToken) {
           const saveRes = await fetch('/api/reports', {
             method: 'POST',
@@ -637,7 +612,7 @@ Ensure all numerical scores and ratings are realistic (0-100). Competitor arrays
           }
         }
 
-        if (user && user.plan !== 'Pro' && savedCredits <= 2 && savedCredits > 0) {
+        if (activeUser && activeUser.plan !== 'Pro' && savedCredits <= 2 && savedCredits > 0) {
           showToast(`${savedCredits} credits left — upgrade for unlimited.`, 'warn');
         }
 
@@ -738,15 +713,72 @@ Ensure all numerical scores and ratings are realistic (0-100). Competitor arrays
             note: ''
           };
 
-          let nextCredits = user ? user.credits : 10;
-          if (user && user.plan !== 'Pro' && nextCredits > 0) {
-            nextCredits--;
+          let savedCredits = activeUser ? activeUser.credits : 10;
+          if (activeAuthToken) {
+            try {
+              const saveRes = await fetch('/api/reports', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  Authorization: `Bearer ${activeAuthToken}`
+                },
+                body: JSON.stringify(mockReport)
+              });
+              if (saveRes.ok) {
+                const saveData = await saveRes.json();
+                savedCredits = saveData.credits !== undefined ? saveData.credits : savedCredits;
+              }
+            } catch (e) {
+              console.error('Error saving fallback report:', e);
+            }
           }
-          finishAnalysis(mockReport, nextCredits);
+
+          if (activeUser && activeUser.plan !== 'Pro' && savedCredits <= 2 && savedCredits > 0) {
+            showToast(`${savedCredits} credits left — upgrade for unlimited.`, 'warn');
+          }
+
+          finishAnalysis(mockReport, savedCredits);
         }, 800);
       }
     }
-  };
+  }, [isRunning, user, token, showToast, fetchReports]);
+
+  // Session API Call
+  const fetchSession = useCallback(async (authToken: string) => {
+    try {
+      const res = await fetch('/api/session', {
+        headers: { Authorization: `Bearer ${authToken}` }
+      });
+      let sessionUser = null;
+      if (res.ok) {
+        const data = await res.json();
+        sessionUser = {
+          name: data.name,
+          email: data.email,
+          plan: data.plan,
+          credits: data.credits,
+          maxCreds: data.maxCreds,
+          team: data.team || []
+        };
+        setUser(sessionUser);
+        fetchReports(authToken);
+      } else {
+        localStorage.removeItem('auth_token');
+        setToken(null);
+        setUser(null);
+      }
+
+      // Check URL parameters after session fetch completes (regardless of success/fail)
+      const params = new URLSearchParams(window.location.search);
+      const queryQ = params.get('q');
+      if (queryQ) {
+        setSearchQuery(queryQ);
+        triggerAnalysis(queryQ, res.ok ? authToken : null, sessionUser);
+      }
+    } catch (err) {
+      console.error('Session validation error:', err);
+    }
+  }, [fetchReports, triggerAnalysis]);
 
   // Curated teaser runner
   const loadSample = (name: string) => {
@@ -922,9 +954,9 @@ Ensure all numerical scores and ratings are realistic (0-100). Competitor arrays
           </div>
 
           <div className="hero-stats" style={{ marginTop: '2rem' }}>
-            <div className="stat"><span className="stat-n">14,000+</span> teardowns generated</div>
+            <div className="stat"><span className="stat-n">{stats.teardowns}</span> teardowns generated</div>
             <div className="dot"></div>
-            <div className="stat"><span className="stat-n">5,400+</span> PMs &amp; founders</div>
+            <div className="stat"><span className="stat-n">{stats.users}</span> PMs &amp; founders</div>
             <div className="dot"></div>
             <div className="stat"><span className="stat-n">&lt;30s</span> analysis time</div>
             <div className="dot"></div>
@@ -1218,7 +1250,7 @@ Ensure all numerical scores and ratings are realistic (0-100). Competitor arrays
                     onBlur={() => setShowNotesGlow(false)}
                   />
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--muted)', marginTop: '6px' }}>
-                    <span>Auto-saves to browser session local storage history.</span>
+                    <span>Saves comments to product teardown history logs.</span>
                     <span style={{ color: 'var(--acc2)' }}>Ready to export</span>
                   </div>
                 </div>
@@ -1436,7 +1468,7 @@ Ensure all numerical scores and ratings are realistic (0-100). Competitor arrays
                 <div style={{ marginBottom: '20px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
                     <label className="auth-lbl" style={{ marginBottom: 0 }}>Password</label>
-                    <a href="#" onClick={(e) => { e.preventDefault(); showToast('Password reset link sent to your email (simulated).', 'ok'); }} style={{ fontSize: '11px', color: 'var(--acc)', textDecoration: 'none', fontWeight: 600 }}>Forgot password?</a>
+                    <a href="#" onClick={(e) => { e.preventDefault(); showToast('Please contact support to reset your password.', 'warn'); }} style={{ fontSize: '11px', color: 'var(--acc)', textDecoration: 'none', fontWeight: 600 }}>Forgot password?</a>
                   </div>
                   <input className="inp" type="password" placeholder="••••••••" required value={loginPassword} onChange={e => setLoginPassword(e.target.value)} autoComplete="current-password" />
                 </div>
@@ -1454,7 +1486,7 @@ Ensure all numerical scores and ratings are realistic (0-100). Competitor arrays
                 </div>
                 <div style={{ marginBottom: '20px' }}>
                   <label className="auth-lbl">Password</label>
-                  <input className="inp" type="password" placeholder="Min. 6 characters" required value={regPassword} onChange={e => setRegPassword(e.target.value)} autoComplete="new-password" />
+                  <input className="inp" type="password" placeholder="Min. 8 characters" required minLength={8} value={regPassword} onChange={e => setRegPassword(e.target.value)} autoComplete="new-password" />
                 </div>
                 <button className="auth-submit-btn" type="submit">Create Account</button>
               </form>
@@ -1476,12 +1508,12 @@ function OverviewTab({ report }: { report: Report }) {
 
   // Radar logic
   const dims = [
-    { label: 'UX', val: report.score_ux || report.score, color: '#2a5fa5' },
-    { label: 'Market', val: report.score_market || report.score, color: '#1a6b4a' },
-    { label: 'Moat', val: report.score_moat || report.score, color: '#6366f1' },
-    { label: 'Growth', val: report.score_growth || report.score, color: '#10b981' },
-    { label: 'Revenue', val: report.score_revenue || report.score, color: '#7c3aed' },
-    { label: 'Retention', val: report.score_retention || report.score, color: '#be123c' }
+    { label: 'UX', val: report.score_ux ?? report.score, color: '#2a5fa5' },
+    { label: 'Market', val: report.score_market ?? report.score, color: '#1a6b4a' },
+    { label: 'Moat', val: report.score_moat ?? report.score, color: '#6366f1' },
+    { label: 'Growth', val: report.score_growth ?? report.score, color: '#10b981' },
+    { label: 'Revenue', val: report.score_revenue ?? report.score, color: '#7c3aed' },
+    { label: 'Retention', val: report.score_retention ?? report.score, color: '#be123c' }
   ];
   const cx = 130, cy = 130, R = 90, n = dims.length;
   const angle = (i: number) => (Math.PI * 2 * (i / n)) - Math.PI / 2;
@@ -1492,13 +1524,13 @@ function OverviewTab({ report }: { report: Report }) {
     const dStr = Array.from({ length: n }, (_, i) => pt(i, R * f))
       .map((p, i) => (i === 0 ? 'M' : 'L') + p[0] + ' ' + p[1])
       .join(' ') + 'Z';
-    return <path key={ringIdx} d={dStr} fill="none" stroke="#e0ded8" strokeWidth="1" />;
+    return <path key={ringIdx} d={dStr} fill="none" stroke="var(--border)" strokeWidth="1" />;
   });
 
   // Spokes
   const spokes = Array.from({ length: n }, (_, i) => {
     const [x, y] = pt(i, R);
-    return <line key={i} x1={cx} y1={cy} x2={x} y2={y} stroke="#e0ded8" strokeWidth="1" />;
+    return <line key={i} x1={cx} y1={cy} x2={x} y2={y} stroke="var(--border)" strokeWidth="1" />;
   });
 
   // Data Polygon
@@ -1513,9 +1545,9 @@ function OverviewTab({ report }: { report: Report }) {
     const [x, y] = pt(i, R + 18);
     const anchor = x < cx - 5 ? 'end' : (x > cx + 5 ? 'start' : 'middle');
     return (
-      <text key={i} x={x} y={y + 4} textAnchor={anchor} fontSize="11" fill="#6b6860" fontFamily="DM Sans, sans-serif" fontWeight="600">
+      <text key={i} x={x} y={y + 4} textAnchor={anchor} fontSize="11" fill="var(--muted)" fontFamily="DM Sans, sans-serif" fontWeight="600">
         {d2.label}
-        <tspan x={x} dy="13" fontWeight="700" fill="#1a1916">{Math.min(d2.val, 100)}</tspan>
+        <tspan x={x} dy="13" fontWeight="700" fill="var(--ink)">{Math.min(d2.val, 100)}</tspan>
       </text>
     );
   });
@@ -1524,7 +1556,7 @@ function OverviewTab({ report }: { report: Report }) {
   const dots = dims.map((d2, i) => {
     const r = R * (Math.min(d2.val, 100) / 100);
     const [x, y] = pt(i, r);
-    return <circle key={i} cx={x} cy={y} r="4" fill={d2.color} stroke="#fff" strokeWidth="1.5" />;
+    return <circle key={i} cx={x} cy={y} r="4" fill={d2.color} stroke="var(--bg)" strokeWidth="1.5" />;
   });
 
   const sources = (report.sources && report.sources.filter(Boolean).length > 0)
@@ -1584,7 +1616,7 @@ function OverviewTab({ report }: { report: Report }) {
 }
 
 function PersonasTab({ report }: { report: Report }) {
-  const renderCard = (p: any, cls: string, bg: string, fg: string, emoji: string) => {
+  const renderCard = (p: Persona | undefined | null, cls: string, bg: string, fg: string, emoji: string) => {
     if (!p) return null;
     const goals = (p.goals || []).map((g: string, i: number) => <span key={i} className="ptag ptag-goal">{g}</span>);
     const pains = (p.pains || []).map((pain: string, i: number) => <span key={i} className="ptag ptag-pain">{pain}</span>);
@@ -1659,12 +1691,12 @@ function SwotTab({ report }: { report: Report }) {
           <rect x={P + iW / 2} y={P} width={iW / 2} height={iH / 2} fill="rgba(42,95,165,.06)" />
           <rect x={P} y={P + iH / 2} width={iW / 2} height={iH / 2} fill="rgba(217,119,6,.06)" />
           <rect x={P + iW / 2} y={P + iH / 2} width={iW / 2} height={iH / 2} fill="rgba(26,107,74,.06)" />
-          <line x1={P} y1={P + iH / 2} x2={P + iW} y2={P + iH / 2} stroke="#e0ded8" strokeWidth="1" strokeDasharray="4" />
-          <line x1={P + iW / 2} y1={P} x2={P + iW / 2} y2={P + iH} stroke="#e0ded8" strokeWidth="1" strokeDasharray="4" />
-          <rect x={P} y={P} width={iW} height={iH} fill="none" stroke="#e0ded8" strokeWidth="1" />
+          <line x1={P} y1={P + iH / 2} x2={P + iW} y2={P + iH / 2} stroke="var(--border)" strokeWidth="1" strokeDasharray="4" />
+          <line x1={P + iW / 2} y1={P} x2={P + iW / 2} y2={P + iH} stroke="var(--border)" strokeWidth="1" strokeDasharray="4" />
+          <rect x={P} y={P} width={iW} height={iH} fill="none" stroke="var(--border)" strokeWidth="1" />
           {dots}
-          <text x={P + iW / 2} y={H - 6} textAnchor="middle" fontSize="10" fill="#a8a59e" fontWeight="600">Impact →</text>
-          <text x="12" y={P + iH / 2} textAnchor="middle" fontSize="10" fill="#a8a59e" fontWeight="600" transform={`rotate(-90,12,${P + iH / 2})`}>Likelihood →</text>
+          <text x={P + iW / 2} y={H - 6} textAnchor="middle" fontSize="10" fill="var(--muted)" fontWeight="600">Impact →</text>
+          <text x="12" y={P + iH / 2} textAnchor="middle" fontSize="10" fill="var(--muted)" fontWeight="600" transform={`rotate(-90,12,${P + iH / 2})`}>Likelihood →</text>
           <text x={P + 4} y={P + 14} fontSize="9" fill="#be123c" fontWeight="700">THREATS</text>
           <text x={P + iW - 4} y={P + 14} textAnchor="end" fontSize="9" fill="#2a5fa5" fontWeight="700">OPPORTUNITIES</text>
           <text x={P + 4} y={P + iH - 6} fontSize="9" fill="#d97706" fontWeight="700">WEAKNESSES</text>
@@ -1706,16 +1738,16 @@ function CompetitorsTab({ report, animate }: { report: Report; animate: boolean 
   });
 
   const xLabels = [0, 25, 50, 75, 100].map((v, i) => (
-    <text key={i} x={scX(v)} y={H - 8} textAnchor="middle" fontSize="10" fill="#a8a59e">{v}</text>
+    <text key={i} x={scX(v)} y={H - 8} textAnchor="middle" fontSize="10" fill="var(--muted)">{v}</text>
   ));
   const yLabels = [0, 25, 50, 75, 100].map((v, i) => (
-    <text key={i} x={PL - 6} y={scY(v) + 4} textAnchor="end" fontSize="10" fill="#a8a59e">{v}</text>
+    <text key={i} x={PL - 6} y={scY(v) + 4} textAnchor="end" fontSize="10" fill="var(--muted)">{v}</text>
   ));
   const gridX = [25, 50, 75].map((v, i) => (
-    <line key={i} x1={scX(v)} y1={PT} x2={scX(v)} y2={PT + iH} stroke="#e0ded8" strokeWidth="1" strokeDasharray="3" />
+    <line key={i} x1={scX(v)} y1={PT} x2={scX(v)} y2={PT + iH} stroke="var(--border)" strokeWidth="1" strokeDasharray="3" />
   ));
   const gridY = [25, 50, 75].map((v, i) => (
-    <line key={i} x1={PL} y1={scY(v)} x2={PL + iW} y2={scY(v)} stroke="#e0ded8" strokeWidth="1" strokeDasharray="3" />
+    <line key={i} x1={PL} y1={scY(v)} x2={PL + iW} y2={scY(v)} stroke="var(--border)" strokeWidth="1" strokeDasharray="3" />
   ));
 
   return (
@@ -1726,15 +1758,15 @@ function CompetitorsTab({ report, animate }: { report: Report; animate: boolean 
             Competitive Positioning Map
           </div>
           <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', maxWidth: `${W}px`, height: 'auto' }} xmlns="http://www.w3.org/2000/svg">
-            <rect x={PL} y={PT} width={iW} height={iH} fill="none" stroke="#e0ded8" strokeWidth="1" />
+            <rect x={PL} y={PT} width={iW} height={iH} fill="none" stroke="var(--border)" strokeWidth="1" />
             {gridX}
             {gridY}
             {bubbles}
             {xLabels}
             {yLabels}
-            <text x={PL + iW / 2} y={H} textAnchor="middle" fontSize="10" fill="#6b6860" fontWeight="600">UX Quality →</text>
-            <text x="10" y={PT + iH / 2} textAnchor="middle" fontSize="10" fill="#6b6860" fontWeight="600" transform={`rotate(-90,10,${PT + iH / 2})`}>Market Fit →</text>
-            <text x={PL + iW - 4} y={PT + 14} textAnchor="end" fontSize="9" fill="#a8a59e">Bubble size = Features</text>
+            <text x={PL + iW / 2} y={H} textAnchor="middle" fontSize="10" fill="var(--muted)" fontWeight="600">UX Quality →</text>
+            <text x="10" y={PT + iH / 2} textAnchor="middle" fontSize="10" fill="var(--muted)" fontWeight="600" transform={`rotate(-90,10,${PT + iH / 2})`}>Market Fit →</text>
+            <text x={PL + iW - 4} y={PT + 14} textAnchor="end" fontSize="9" fill="var(--muted)">Bubble size = Features</text>
           </svg>
         </div>
         <div className="comp-table">
@@ -1863,7 +1895,7 @@ function MetricsTab({ report, animate }: { report: Report; animate: boolean }) {
     const r = 28, circ = 2 * Math.PI * r, fill = circ - (val / 100) * circ;
     return (
       <svg className="gauge-svg" viewBox="0 0 70 70" width="60" height="60">
-        <circle cx="35" cy="35" r={r} fill="none" stroke="#e0ded8" strokeWidth="7" />
+        <circle cx="35" cy="35" r={r} fill="none" stroke="var(--bg3)" strokeWidth="7" />
         <circle
           cx="35"
           cy="35"
@@ -1876,7 +1908,7 @@ function MetricsTab({ report, animate }: { report: Report; animate: boolean }) {
           strokeDashoffset={animate ? fill : circ}
           style={{ transform: 'rotate(-90deg)', transformOrigin: '50% 50%', transition: 'stroke-dashoffset 0.8s ease' }}
         />
-        <text x="35" y="39" textAnchor="middle" fontSize="13" fontWeight="700" fill="#1a1916">{val}</text>
+        <text x="35" y="39" textAnchor="middle" fontSize="13" fontWeight="700" fill="var(--ink)">{val}</text>
       </svg>
     );
   };
@@ -1920,7 +1952,7 @@ function RiceTab({ report, animate }: { report: Report; animate: boolean }) {
   const items = report.rice || (report.features || []).slice(0, 5).map((f, i) => ({ feature: f, reach: 9 - i, impact: i < 2 ? 3 : 2, confidence: 90 - i * 5, effort: i < 2 ? 2 : 3 }));
   const scored = items.map(r => ({ ...r, score: Math.round((r.reach * r.impact * (r.confidence / 100)) / r.effort * 10) })).sort((a, b) => b.score - a.score);
   const maxScore = scored[0]?.score || 1;
-  const colors = ['#1a6b4a', '#2a5fa5', '#7c3aed', '#6366f1', '#6b6860'];
+  const colors = ['#1a6b4a', '#2a5fa5', '#7c3aed', '#6366f1', 'var(--muted)'];
 
   return (
     <div className="tab-panel">
@@ -1951,7 +1983,7 @@ function RiceTab({ report, animate }: { report: Report; animate: boolean }) {
                   { label: 'Reach', val: r.reach, max: 10 },
                   { label: 'Impact', val: r.impact, max: 3 },
                   { label: 'Confidence', val: r.confidence, max: 100 },
-                  { label: 'Effort', val: r.effort, max: 5, bg: '#e0ded8' }
+                  { label: 'Effort', val: r.effort, max: 5, bg: 'var(--border)' }
                 ].map((dim, idx) => {
                   const fillPct = Math.round((dim.val / dim.max) * 100);
                   return (
