@@ -1,63 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-
-// Types representing the database schema
-export interface Report {
-  id?: string;
-  name: string;
-  score: number;
-  score_ux: number;
-  score_market: number;
-  score_moat: number;
-  score_growth: number;
-  score_revenue: number;
-  score_retention: number;
-  date: string;
-  ts: number;
-  domain?: string;
-  col: string;
-  saved: boolean;
-  note: string;
-  tagline?: string;
-  problem?: string;
-  users?: string;
-  value?: string;
-  revenue?: string;
-  strengths?: string[];
-  weaknesses?: string[];
-  opportunities?: string[];
-  threats?: string[];
-  persona_primary?: any;
-  persona_secondary?: any;
-  journey?: any[];
-  metrics?: any[];
-  rice?: any[];
-  prd?: any;
-  features?: string[];
-  isComparison?: boolean;
-}
-
-export interface TeamMember {
-  initials: string;
-  name: string;
-  role: string;
-  tears: number;
-  lastActive: string;
-  col: string;
-}
-
-export interface User {
-  name: string;
-  email: string;
-  passwordHash: string;
-  salt: string;
-  token?: string;
-  plan: string;
-  credits: number;
-  maxCreds: number;
-  reports: Report[];
-  team: TeamMember[];
-}
+import { User } from './types';
 
 // ────────────────────────────────────────────────────────────────
 // LOCAL FILE DATABASE ADAPTER
@@ -86,20 +29,36 @@ function saveLocalDB(data: { users: Record<string, User> }) {
 }
 
 // ────────────────────────────────────────────────────────────────
-// MONGODB ADAPTER (Lazy Loaded)
+// MONGODB ADAPTER (Lazy Loaded & Globally Cached)
 // ────────────────────────────────────────────────────────────────
 
-let cachedMongoClient: any = null;
+const globalWithMongo = global as typeof globalThis & {
+  _mongoClient?: any;
+};
 
 async function getMongoClient() {
-  if (cachedMongoClient) return cachedMongoClient;
   const uri = process.env.MONGODB_URI;
   if (!uri) throw new Error('MONGODB_URI not configured.');
 
   const { MongoClient } = await import('mongodb');
-  const client = new MongoClient(uri);
-  await client.connect();
-  cachedMongoClient = client;
+
+  let client = globalWithMongo._mongoClient;
+  let isConnected = false;
+  if (client) {
+    try {
+      await client.db().command({ ping: 1 });
+      isConnected = true;
+    } catch (e) {
+      isConnected = false;
+    }
+  }
+
+  if (!client || !isConnected) {
+    client = new MongoClient(uri);
+    await client.connect();
+    globalWithMongo._mongoClient = client;
+  }
+
   return client;
 }
 
@@ -118,16 +77,41 @@ export const db = {
     return !!process.env.MONGODB_URI;
   },
 
+  async getStats(): Promise<{ usersCount: number; teardownsCount: number }> {
+    if (this.isCloud()) {
+      try {
+        const col = await getMongoCollection();
+        const usersCount = await col.countDocuments();
+        const reportsAggregation = await col.aggregate([
+          { $project: { reportsCount: { $size: { $ifNull: [ "$reports", [] ] } } } },
+          { $group: { _id: null, total: { $sum: "$reportsCount" } } }
+        ]).toArray();
+        const teardownsCount = reportsAggregation[0]?.total || 0;
+        return { usersCount, teardownsCount };
+      } catch (err) {
+        console.error('MongoDB getStats error:', err);
+        return { usersCount: 0, teardownsCount: 0 };
+      }
+    }
+
+    const local = loadLocalDB();
+    const users = Object.values(local.users);
+    const usersCount = users.length;
+    const teardownsCount = users.reduce((acc, u) => acc + (u.reports ? u.reports.length : 0), 0);
+    return { usersCount, teardownsCount };
+  },
+
   async getUser(email: string): Promise<User | null> {
     const lowerEmail = email.toLowerCase().trim();
     
     if (this.isCloud()) {
       try {
         const col = await getMongoCollection();
-        const doc = await col.findOne({ email: lowerEmail });
+        const doc = await col.findOne({ email: lowerEmail }, { projection: { _id: 0 } });
         return doc as unknown as User;
       } catch (err) {
-        console.error('MongoDB getUser error, falling back:', err);
+        console.error('MongoDB getUser error:', err);
+        throw err;
       }
     }
 
@@ -150,7 +134,8 @@ export const db = {
         );
         return;
       } catch (err) {
-        console.error('MongoDB saveUser error, falling back:', err);
+        console.error('MongoDB saveUser error:', err);
+        throw err;
       }
     }
 
@@ -166,10 +151,11 @@ export const db = {
     if (this.isCloud()) {
       try {
         const col = await getMongoCollection();
-        const doc = await col.findOne({ token });
+        const doc = await col.findOne({ token }, { projection: { _id: 0 } });
         return doc as unknown as User;
       } catch (err) {
-        console.error('MongoDB getUserByToken error, falling back:', err);
+        console.error('MongoDB getUserByToken error:', err);
+        throw err;
       }
     }
 
@@ -188,11 +174,12 @@ export const db = {
         const result = await col.findOneAndUpdate(
           { email: lowerEmail },
           { $set: updates },
-          { returnDocument: 'after' }
+          { projection: { _id: 0 }, returnDocument: 'after' }
         );
         return result as unknown as User;
       } catch (err) {
-        console.error('MongoDB updateUser error, falling back:', err);
+        console.error('MongoDB updateUser error:', err);
+        throw err;
       }
     }
 
@@ -201,8 +188,34 @@ export const db = {
     const user = local.users[lowerEmail];
     if (!user) return null;
 
-    local.users[lowerEmail] = { ...user, ...updates };
+    const updatedUser = { ...user, ...updates };
+    const nextEmail = updatedUser.email.toLowerCase().trim();
+    
+    if (nextEmail !== lowerEmail) {
+      delete local.users[lowerEmail];
+    }
+    local.users[nextEmail] = updatedUser;
     saveLocalDB(local);
-    return local.users[lowerEmail];
+    return local.users[nextEmail];
+  },
+
+  async deleteUser(email: string): Promise<void> {
+    const lowerEmail = email.toLowerCase().trim();
+
+    if (this.isCloud()) {
+      try {
+        const col = await getMongoCollection();
+        await col.deleteOne({ email: lowerEmail });
+        return;
+      } catch (err) {
+        console.error('MongoDB deleteUser error:', err);
+        throw err;
+      }
+    }
+
+    // Local Fallback
+    const local = loadLocalDB();
+    delete local.users[lowerEmail];
+    saveLocalDB(local);
   }
 };
