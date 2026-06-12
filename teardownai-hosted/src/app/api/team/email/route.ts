@@ -18,7 +18,7 @@ export async function DELETE(
 
     const targetEmail = decodeURIComponent(params.email).toLowerCase().trim();
     user.team = (user.team || []).filter(
-      m => m.role === 'admin' || m.name.toLowerCase() !== targetEmail
+      m => m.role === 'admin' || (m.email ? m.email.toLowerCase() !== targetEmail : m.name.toLowerCase() !== targetEmail)
     );
 
     await db.saveUser(user);
