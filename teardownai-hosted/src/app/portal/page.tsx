@@ -75,18 +75,7 @@ export default function PortalPage() {
     setTheme(savedTheme as 'light' | 'dark');
     document.body.classList.toggle('dark-theme', savedTheme === 'dark');
 
-    // Auth validation
-    const savedToken = localStorage.getItem('auth_token');
-    if (!savedToken) {
-      showToast('Please sign in to access the portal.', 'warn');
-      setTimeout(() => {
-        router.push('/?auth=true');
-      }, 1000);
-      return;
-    }
-
-    setToken(savedToken);
-    bootstrapPortal(savedToken);
+    bootstrapPortal();
 
     // Initial View parameter check
     const params = new URLSearchParams(window.location.search);
@@ -112,20 +101,19 @@ export default function PortalPage() {
   };
 
   // Bootstrap session and query reports list
-  const bootstrapPortal = async (authToken: string) => {
+  const bootstrapPortal = async () => {
     try {
-      const res = await fetch('/api/session', {
-        headers: { Authorization: `Bearer ${authToken}` }
-      });
+      const res = await fetch('/api/session');
       if (!res.ok) {
-        localStorage.removeItem('auth_token');
-        showToast('Session expired. Please log in again.', 'warn');
+        setToken(null);
+        showToast('Please sign in to access the portal.', 'warn');
         setTimeout(() => {
           router.push('/?auth=true');
         }, 1000);
         return;
       }
 
+      setToken('session');
       const sessionData = await res.json();
       setRazorpayKey(sessionData.razorpayKey || '');
       setUser({
@@ -140,9 +128,7 @@ export default function PortalPage() {
       setSetFieldEmail(sessionData.email);
 
       // Query reports
-      const reportsRes = await fetch('/api/reports', {
-        headers: { Authorization: `Bearer ${authToken}` }
-      });
+      const reportsRes = await fetch('/api/reports');
       if (reportsRes.ok) {
         const reportsData = await reportsRes.json();
         setReports(reportsData.reports || []);
@@ -152,8 +138,14 @@ export default function PortalPage() {
     }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('auth_token');
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/logout', { method: 'POST' });
+    } catch (e) {
+      console.error('Logout request failed:', e);
+    }
+    setToken(null);
+    setUser(null);
     showToast('Logged out successfully!', 'ok');
     setTimeout(() => {
       router.push('/');
@@ -183,8 +175,7 @@ export default function PortalPage() {
       const res = await fetch('/api/reports', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify(updated)
       });
@@ -203,8 +194,7 @@ export default function PortalPage() {
     
     try {
       const res = await fetch(`/api/reports/${reportItem.id}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` }
+        method: 'DELETE'
       });
       if (res.ok) {
         showToast('Report deleted', 'ok');
@@ -228,8 +218,7 @@ export default function PortalPage() {
       const res = await fetch('/api/team/invite', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({ email })
       });
@@ -252,8 +241,7 @@ export default function PortalPage() {
     if (!token) return;
     try {
       const res = await fetch(`/api/team/${encodeURIComponent(memberEmail)}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` }
+        method: 'DELETE'
       });
       if (res.ok) {
         const data = await res.json();
@@ -331,8 +319,7 @@ export default function PortalPage() {
       const res = await fetch('/api/verify-payment', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           razorpay_order_id: orderId,
@@ -361,8 +348,7 @@ export default function PortalPage() {
       const res = await fetch('/api/session', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify(payload)
       });
@@ -384,8 +370,7 @@ export default function PortalPage() {
     if (!token) return;
     try {
       const res = await fetch('/api/reports', {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` }
+        method: 'DELETE'
       });
       if (res.ok) {
         setReports([]);
@@ -406,11 +391,10 @@ export default function PortalPage() {
     }
     try {
       const res = await fetch('/api/session', {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` }
+        method: 'DELETE'
       });
       if (res.ok) {
-        localStorage.removeItem('auth_token');
+        setToken(null);
         setUser(null);
         showToast('Account deleted successfully.', 'ok');
         setTimeout(() => {

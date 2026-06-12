@@ -4,11 +4,10 @@ import { sanitizeUser } from '@/lib/types';
 
 export async function GET(req: NextRequest) {
   try {
-    const authHeader = req.headers.get('authorization');
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    const token = req.cookies.get('auth_token')?.value;
+    if (!token) {
       return NextResponse.json({ error: 'No authorization token provided.' }, { status: 401 });
     }
-    const token = authHeader.split(' ')[1];
     const user = await db.getUserByToken(token);
     if (!user) {
       return NextResponse.json({ error: 'Invalid or expired session.' }, { status: 401 });
@@ -28,11 +27,10 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const authHeader = req.headers.get('authorization');
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    const token = req.cookies.get('auth_token')?.value;
+    if (!token) {
       return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
     }
-    const token = authHeader.split(' ')[1];
     const user = await db.getUserByToken(token);
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
@@ -62,18 +60,21 @@ export async function POST(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   try {
-    const authHeader = req.headers.get('authorization');
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    const token = req.cookies.get('auth_token')?.value;
+    if (!token) {
       return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
     }
-    const token = authHeader.split(' ')[1];
     const user = await db.getUserByToken(token);
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
     }
 
     await db.deleteUser(user.email);
-    return NextResponse.json({ success: true });
+
+    // Clear the session cookie upon account deletion
+    const response = NextResponse.json({ success: true });
+    response.cookies.set('auth_token', '', { maxAge: 0, path: '/' });
+    return response;
   } catch (err: any) {
     console.error('API session DELETE error:', err.message);
     return NextResponse.json({ error: 'Server error during account deletion.' }, { status: 500 });

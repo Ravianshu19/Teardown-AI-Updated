@@ -26,6 +26,15 @@ import {
 } from 'lucide-react';
 import { PRODUCT_DB } from '@/lib/products';
 import { Report, Competitor, TeamMember, Persona } from '@/lib/types';
+import { SYSTEM_PROMPT } from '@/lib/prompts';
+import OverviewTab from '@/components/report/OverviewTab';
+import PersonasTab from '@/components/report/PersonasTab';
+import SwotTab from '@/components/report/SwotTab';
+import CompetitorsTab from '@/components/report/CompetitorsTab';
+import JourneyTab from '@/components/report/JourneyTab';
+import MetricsTab from '@/components/report/MetricsTab';
+import RiceTab from '@/components/report/RiceTab';
+import PrdTab from '@/components/report/PrdTab';
 
 interface UserState {
   name: string;
@@ -113,11 +122,9 @@ export default function LandingPage() {
 
 
   // Fetch Reports list
-  const fetchReports = useCallback(async (authToken: string) => {
+  const fetchReports = useCallback(async () => {
     try {
-      const res = await fetch('/api/reports', {
-        headers: { Authorization: `Bearer ${authToken}` }
-      });
+      const res = await fetch('/api/reports');
       if (res.ok) {
         const data = await res.json();
         setHistory(data.reports || []);
@@ -147,8 +154,7 @@ export default function LandingPage() {
         return;
       }
       
-      localStorage.setItem('auth_token', data.token);
-      setToken(data.token);
+      setToken('session');
       setUser({
         name: data.name,
         email: data.email,
@@ -160,7 +166,7 @@ export default function LandingPage() {
       showToast(type === 'login' ? 'Logged in successfully!' : 'Account registered successfully!', 'ok');
       setIsAuthModalOpen(false);
       // Fetch latest reports
-      fetchReports(data.token);
+      fetchReports();
       
       // Redirect to portal only if NOT mid-analysis
       if (!currentReport && !isRunning) {
@@ -174,8 +180,12 @@ export default function LandingPage() {
     }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('auth_token');
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/logout', { method: 'POST' });
+    } catch (e) {
+      console.error('Logout request failed:', e);
+    }
     setToken(null);
     setUser(null);
     setHistory([]);
@@ -249,7 +259,7 @@ export default function LandingPage() {
   // Analysis engine trigger
   const triggerAnalysis = useCallback(async (
     queryVal: string,
-    activeAuthToken: string | null = token,
+    isLoggedIn: boolean = token !== null,
     overrideUser: any = null
   ) => {
     if (isRunning) return;
@@ -329,9 +339,9 @@ export default function LandingPage() {
           setAnimateBars(true);
         }, 100);
 
-        if (user && activeAuthToken) {
+        if (user && isLoggedIn) {
           setUser(prev => prev ? { ...prev, credits: userCredits } : null);
-          fetchReports(activeAuthToken);
+          fetchReports();
         }
       }, 300);
     };
@@ -355,13 +365,12 @@ export default function LandingPage() {
 
         // Post to database to decrement credit and save history
         let savedCredits = activeUser ? activeUser.credits : 10;
-        if (activeAuthToken) {
+        if (isLoggedIn) {
           try {
             const saveRes = await fetch('/api/reports', {
               method: 'POST',
               headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${activeAuthToken}`
+                'Content-Type': 'application/json'
               },
               body: JSON.stringify(mockReport)
             });
@@ -383,130 +392,9 @@ export default function LandingPage() {
 
     } else {
       // API Generation path
-      const systemPrompt = `You are a Senior Product Manager. Your task is to perform a detailed product teardown for the requested product.
-You must return your response ONLY as a single valid JSON object with NO markdown wrapper, NO code blocks, and NO leading/trailing text.
-
-The JSON object must strictly match the following structure:
-{
-  "name": "Exact Name of the Product",
-  "tagline": "A compelling 1-sentence tagline describing what the product does",
-  "problem": "A detailed 2-3 sentence paragraph explaining the core problem this product solves for its users",
-  "users": "A comma-separated list of target user groups (e.g., 'SMEs, Freelancers, Developers')",
-  "value": "A detailed 2-3 sentence paragraph describing the unique value proposition of the product",
-  "revenue": "Description of the revenue model (e.g., 'Freemium SaaS - $8/user/month')",
-  "competitors": [
-    { "name": "Competitor 1 Name", "threat": "high", "ux": 85, "features": 78, "pricing": 70, "market": 82 },
-    { "name": "Competitor 2 Name", "threat": "medium", "ux": 62, "features": 60, "pricing": 80, "market": 45 },
-    { "name": "Competitor 3 Name", "threat": "high", "ux": 80, "features": 85, "pricing": 65, "market": 75 },
-    { "name": "Competitor 4 Name", "threat": "low", "ux": 50, "features": 55, "pricing": 90, "market": 30 },
-    { "name": "Competitor 5 Name", "threat": "medium", "ux": 72, "features": 70, "pricing": 75, "market": 60 }
-  ],
-  "score": 85,
-  "score_ux": 88,
-  "score_market": 84,
-  "score_moat": 80,
-  "score_growth": 86,
-  "score_revenue": 82,
-  "score_retention": 85,
-  "strengths": [
-    "Strength 1 description (1 sentence)",
-    "Strength 2 description (1 sentence)",
-    "Strength 3 description (1 sentence)"
-  ],
-  "weaknesses": [
-    "Weakness 1 description (1 sentence)",
-    "Weakness 2 description (1 sentence)",
-    "Weakness 3 description (1 sentence)"
-  ],
-  "opportunities": [
-    "Opportunity 1 description (1 sentence)",
-    "Opportunity 2 description (1 sentence)",
-    "Opportunity 3 description (1 sentence)"
-  ],
-  "threats": [
-    "Threat 1 description (1 sentence)",
-    "Threat 2 description (1 sentence)",
-    "Threat 3 description (1 sentence)"
-  ],
-  "persona_primary": {
-    "name": "Primary Persona Name",
-    "role": "Job Role or Profile",
-    "age": "Age Range (e.g., '25-35')",
-    "goals": ["Goal 1 (short phrase)", "Goal 2", "Goal 3"],
-    "pains": ["Pain point 1 (short phrase)", "Pain point 2", "Pain point 3"],
-    "triggers": ["Trigger event 1", "Trigger event 2"]
-  },
-  "persona_secondary": {
-    "name": "Secondary Persona Name",
-    "role": "Job Role or Profile 2",
-    "age": "Age Range 2",
-    "goals": ["Goal 1", "Goal 2", "Goal 3"],
-    "pains": ["Pain point 1", "Pain point 2", "Pain point 3"],
-    "triggers": ["Trigger event 1", "Trigger event 2"]
-  },
-  "journey": [
-    { "stage": "Discovery", "title": "Discovery Stage Title", "desc": "1-2 sentence description of discovery", "actions": ["Action 1", "Action 2"] },
-    { "stage": "Onboarding", "title": "Onboarding Stage Title", "desc": "1-2 sentence description of onboarding", "actions": ["Action 1", "Action 2"] },
-    { "stage": "Activation", "title": "Activation Stage Title", "desc": "1-2 sentence description of activation/aha moment", "actions": ["Action 1", "Action 2"] },
-    { "stage": "Retention", "title": "Retention Stage Title", "desc": "1-2 sentence description of daily usage habits", "actions": ["Action 1", "Action 2"] },
-    { "stage": "Referral", "title": "Referral Stage Title", "desc": "1-2 sentence description of how referrals occur", "actions": ["Action 1", "Action 2"] }
-  ],
-  "metrics": [
-    { "name": "Metric 1 Name", "value": "Metric 1 Definition", "importance": 95, "priority": "high" },
-    { "name": "Metric 2 Name", "value": "Metric 2 Definition", "importance": 90, "priority": "high" },
-    { "name": "Metric 3 Name", "value": "Metric 3 Definition", "importance": 85, "priority": "high" },
-    { "name": "Metric 4 Name", "value": "Metric 4 Definition", "importance": 80, "priority": "high" },
-    { "name": "Metric 5 Name", "value": "Metric 5 Definition", "importance": 75, "priority": "medium" },
-    { "name": "Metric 6 Name", "value": "Metric 6 Definition", "importance": 70, "priority": "medium" },
-    { "name": "Metric 7 Name", "value": "Metric 7 Definition", "importance": 60, "priority": "medium" },
-    { "name": "Metric 8 Name", "value": "Metric 8 Definition", "importance": 50, "priority": "low" }
-  ],
-  "rice": [
-    { "feature": "Feature 1 description", "reach": 8, "impact": 3, "confidence": 90, "effort": 2 },
-    { "feature": "Feature 2 description", "reach": 7, "impact": 2, "confidence": 85, "effort": 1 },
-    { "feature": "Feature 3 description", "reach": 9, "impact": 2, "confidence": 80, "effort": 3 },
-    { "feature": "Feature 4 description", "reach": 6, "impact": 3, "confidence": 75, "effort": 4 },
-    { "feature": "Feature 5 description", "reach": 5, "impact": 3, "confidence": 70, "effort": 5 }
-  ],
-  "prd": {
-    "feature": "Name of the highest priority feature",
-    "objective": "Objective statement for the feature (1 sentence)",
-    "user_story": "As a... I want to... so that...",
-    "acceptance_criteria": [
-      "Criteria 1",
-      "Criteria 2",
-      "Criteria 3",
-      "Criteria 4"
-    ],
-    "success_metrics": [
-      "Metric 1 description",
-      "Metric 2 description",
-      "Metric 3 description"
-    ],
-    "open_questions": [
-      "Open question 1",
-      "Open question 2"
-    ]
-  },
-  "features": [
-    "Core Feature 1 Name",
-    "Core Feature 2 Name",
-    "Core Feature 3 Name",
-    "Core Feature 4 Name",
-    "Core Feature 5 Name"
-  ],
-  "sources": [
-    "Source 1 Name or Domain (e.g. Reddit r/productmanagement)",
-    "Source 2 Name or Domain (e.g. G2 Reviews)",
-    "Source 3 Name or Domain (e.g. Company Help Center)"
-  ]
-}
-
-Ensure all numerical scores and ratings are realistic (0-100). Competitor arrays must contain exactly 5 competitors. Strengths, weaknesses, opportunities, threats lists must contain exactly 3 items. Features must contain exactly 5 items. Sources must contain exactly 3 items. Acceptance criteria must contain exactly 4 items, success metrics exactly 3, and open questions exactly 2. All journey stages must be in the correct order: Discovery, Onboarding, Activation, Retention, Referral.`;
-
       const payload = {
         max_tokens: 4000,
-        system: systemPrompt,
+        system: SYSTEM_PROMPT,
         messages: [{ role: 'user', content: `Generate a detailed product teardown for the product or URL: "${name}".` }]
       };
 
@@ -553,12 +441,11 @@ Ensure all numerical scores and ratings are realistic (0-100). Competitor arrays
 
         // Post to database to decrement credit and save history
         let savedCredits = activeUser ? activeUser.credits : 10;
-        if (activeAuthToken) {
+        if (isLoggedIn) {
           const saveRes = await fetch('/api/reports', {
             method: 'POST',
             headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${activeAuthToken}`
+              'Content-Type': 'application/json'
             },
             body: JSON.stringify(structuredReport)
           });
@@ -670,13 +557,12 @@ Ensure all numerical scores and ratings are realistic (0-100). Competitor arrays
           };
 
           let savedCredits = activeUser ? activeUser.credits : 10;
-          if (activeAuthToken) {
+          if (isLoggedIn) {
             try {
               const saveRes = await fetch('/api/reports', {
                 method: 'POST',
                 headers: {
-                  'Content-Type': 'application/json',
-                  Authorization: `Bearer ${activeAuthToken}`
+                  'Content-Type': 'application/json'
                 },
                 body: JSON.stringify(mockReport)
               });
@@ -700,11 +586,9 @@ Ensure all numerical scores and ratings are realistic (0-100). Competitor arrays
   }, [isRunning, user, token, showToast, fetchReports]);
 
   // Session API Call
-  const fetchSession = useCallback(async (authToken: string) => {
+  const fetchSession = useCallback(async () => {
     try {
-      const res = await fetch('/api/session', {
-        headers: { Authorization: `Bearer ${authToken}` }
-      });
+      const res = await fetch('/api/session');
       let sessionUser = null;
       if (res.ok) {
         const data = await res.json();
@@ -716,10 +600,10 @@ Ensure all numerical scores and ratings are realistic (0-100). Competitor arrays
           maxCreds: data.maxCreds,
           team: data.team || []
         };
+        setToken('session');
         setUser(sessionUser);
-        fetchReports(authToken);
+        fetchReports();
       } else {
-        localStorage.removeItem('auth_token');
         setToken(null);
         setUser(null);
       }
@@ -729,7 +613,7 @@ Ensure all numerical scores and ratings are realistic (0-100). Competitor arrays
       const queryQ = params.get('q');
       if (queryQ) {
         setSearchQuery(queryQ);
-        triggerAnalysis(queryQ, res.ok ? authToken : null, sessionUser);
+        triggerAnalysis(queryQ, res.ok, sessionUser);
       }
     } catch (err) {
       console.error('Session validation error:', err);
@@ -746,20 +630,8 @@ Ensure all numerical scores and ratings are realistic (0-100). Competitor arrays
     setTheme(savedTheme as 'light' | 'dark');
     document.body.classList.toggle('dark-theme', savedTheme === 'dark');
 
-    // Token
-    const savedToken = localStorage.getItem('auth_token');
-    if (savedToken) {
-      setToken(savedToken);
-      fetchSession(savedToken);
-    } else {
-      // Guest path: trigger immediately since there's no session to wait for
-      const params = new URLSearchParams(window.location.search);
-      const queryQ = params.get('q');
-      if (queryQ) {
-        setSearchQuery(queryQ);
-        triggerAnalysis(queryQ, null, null);
-      }
-    }
+    // Check session on mount
+    fetchSession();
 
     // URL Query Routing
     const params = new URLSearchParams(window.location.search);
@@ -780,7 +652,7 @@ Ensure all numerical scores and ratings are realistic (0-100). Competitor arrays
         }
       })
       .catch(() => {});
-  }, [fetchSession, triggerAnalysis]);
+  }, [fetchSession]);
 
   // Curated teaser runner
   const loadSample = (name: string) => {
@@ -799,14 +671,13 @@ Ensure all numerical scores and ratings are realistic (0-100). Competitor arrays
         const res = await fetch('/api/reports', {
           method: 'POST',
           headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`
+            'Content-Type': 'application/json'
           },
           body: JSON.stringify(updatedReport)
         });
         if (res.ok) {
           showToast('Notes saved successfully!', 'ok');
-          fetchReports(token);
+          fetchReports();
         }
       } catch (err) {
         showToast('Error saving notes.', 'warn');
@@ -1500,589 +1371,7 @@ Ensure all numerical scores and ratings are realistic (0-100). Competitor arrays
   );
 }
 
-// ────────────────────────────────────────────────────────────────
-// REPORT SUB-TAB COMPONENTS (JSX replicas matching css classes)
-// ────────────────────────────────────────────────────────────────
 
-function OverviewTab({ report }: { report: Report }) {
-  const comps = (report.competitors || []).map(c => typeof c === 'object' ? c.name : c);
-  const feats = (report.features || []).map((f, i) => <span key={i} className="pill">{f}</span>);
-
-  // Radar logic
-  const dims = [
-    { label: 'UX', val: report.score_ux ?? report.score, color: '#2a5fa5' },
-    { label: 'Market', val: report.score_market ?? report.score, color: '#1a6b4a' },
-    { label: 'Moat', val: report.score_moat ?? report.score, color: '#6366f1' },
-    { label: 'Growth', val: report.score_growth ?? report.score, color: '#10b981' },
-    { label: 'Revenue', val: report.score_revenue ?? report.score, color: '#7c3aed' },
-    { label: 'Retention', val: report.score_retention ?? report.score, color: '#be123c' }
-  ];
-  const cx = 130, cy = 130, R = 90, n = dims.length;
-  const angle = (i: number) => (Math.PI * 2 * (i / n)) - Math.PI / 2;
-  const pt = (i: number, r: number) => [cx + Math.cos(angle(i)) * r, cy + Math.sin(angle(i)) * r];
-
-  // Grid rings
-  const rings = [0.25, 0.5, 0.75, 1].map((f, ringIdx) => {
-    const dStr = Array.from({ length: n }, (_, i) => pt(i, R * f))
-      .map((p, i) => (i === 0 ? 'M' : 'L') + p[0] + ' ' + p[1])
-      .join(' ') + 'Z';
-    return <path key={ringIdx} d={dStr} fill="none" stroke="var(--border)" strokeWidth="1" />;
-  });
-
-  // Spokes
-  const spokes = Array.from({ length: n }, (_, i) => {
-    const [x, y] = pt(i, R);
-    return <line key={i} x1={cx} y1={cy} x2={x} y2={y} stroke="var(--border)" strokeWidth="1" />;
-  });
-
-  // Data Polygon
-  const polyD = dims.map((d2, i) => {
-    const r = R * (Math.min(d2.val, 100) / 100);
-    const [x, y] = pt(i, r);
-    return (i === 0 ? 'M' : 'L') + x + ' ' + y;
-  }).join(' ') + 'Z';
-
-  // Labels
-  const labels = dims.map((d2, i) => {
-    const [x, y] = pt(i, R + 18);
-    const anchor = x < cx - 5 ? 'end' : (x > cx + 5 ? 'start' : 'middle');
-    return (
-      <text key={i} x={x} y={y + 4} textAnchor={anchor} fontSize="11" fill="var(--muted)" fontFamily="DM Sans, sans-serif" fontWeight="600">
-        {d2.label}
-        <tspan x={x} dy="13" fontWeight="700" fill="var(--ink)">{Math.min(d2.val, 100)}</tspan>
-      </text>
-    );
-  });
-
-  // Dots
-  const dots = dims.map((d2, i) => {
-    const r = R * (Math.min(d2.val, 100) / 100);
-    const [x, y] = pt(i, r);
-    return <circle key={i} cx={x} cy={y} r="4" fill={d2.color} stroke="var(--bg)" strokeWidth="1.5" />;
-  });
-
-  const sources = (report.sources && report.sources.filter(Boolean).length > 0)
-    ? report.sources.filter(Boolean)
-    : ['OpenAI', 'Crunchbase', 'Company website', 'App Store reviews'];
-
-  return (
-    <div className="tab-panel">
-      <div className="overview-grid">
-        <div className="radar-wrap">
-          <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--dim)', textTransform: 'uppercase', letterSpacing: '.7px', marginBottom: '8px', textAlign: 'center' }}>
-            Product Score Radar
-          </div>
-          <svg viewBox="0 0 260 260" width="260" height="260" xmlns="http://www.w3.org/2000/svg">
-            {rings}
-            {spokes}
-            <path d={polyD} fill="rgba(42,95,165,.12)" stroke="#2a5fa5" strokeWidth="2" strokeLinejoin="round" />
-            {dots}
-            {labels}
-          </svg>
-        </div>
-        
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', minWidth: 0, width: '100%' }}>
-          <div className="ov-card"><div className="ov-label">Problem solved</div><div className="ov-val">{report.problem || ''}</div></div>
-          <div className="ov-card"><div className="ov-label">Value proposition</div><div className="ov-val">{report.value || ''}</div></div>
-          <div className="ov-card"><div className="ov-label">Target users</div><div className="ov-val">{report.users || ''}</div></div>
-          <div className="ov-card"><div className="ov-label">Revenue model</div><div className="ov-val">{report.revenue || ''}</div></div>
-        </div>
-      </div>
-
-      <div className="ov-card" style={{ marginBottom: '12px', marginTop: '12px' }}>
-        <div className="ov-label">Competitors</div>
-        <div className="ov-comp-list" style={{ marginTop: '6px' }}>
-          {comps.map((c, i) => <span key={i} className="comp-chip">{c}</span>)}
-        </div>
-      </div>
-
-      <div className="ov-card" style={{ marginBottom: '12px' }}>
-        <div className="ov-label">Recommended next features</div>
-        <div className="feat-pill-list" style={{ marginTop: '8px' }}>
-          {feats}
-        </div>
-      </div>
-
-      <div className="ov-card" style={{ marginTop: '12px' }}>
-        <div className="ov-label">📌 Sources &amp; Citations</div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '8px' }}>
-          {sources.map((s, i) => (
-            <span key={i} className="source-chip" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: 'var(--bg3)', border: '1px solid var(--border)', padding: '4px 10px', borderRadius: '100px', fontSize: '12px', color: 'var(--muted)' }}>
-              <span style={{ color: 'var(--dim)' }}>•</span> {s}
-            </span>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function PersonasTab({ report }: { report: Report }) {
-  const renderCard = (p: Persona | undefined | null, cls: string, bg: string, fg: string, emoji: string) => {
-    if (!p) return null;
-    const goals = (p.goals || []).map((g: string, i: number) => <span key={i} className="ptag ptag-goal">{g}</span>);
-    const pains = (p.pains || []).map((pain: string, i: number) => <span key={i} className="ptag ptag-pain">{pain}</span>);
-    const triggers = (p.triggers || []).map((t: string, i: number) => <span key={i} className="ptag ptag-trigger">{t}</span>);
-
-    return (
-      <div className={`persona-card ${cls}`}>
-        <div className="persona-avatar" style={{ background: bg, color: fg }}>{emoji}</div>
-        <div className="persona-name">{p.name || 'User'}</div>
-        <div className="persona-role">{p.role || ''} · {p.age || ''}</div>
-        <div className="persona-section"><div className="persona-section-label">Goals</div><div className="persona-tags">{goals}</div></div>
-        <div className="persona-section"><div className="persona-section-label">Pain points</div><div className="persona-tags">{pains}</div></div>
-        <div className="persona-section"><div className="persona-section-label">Triggers</div><div className="persona-tags">{triggers}</div></div>
-      </div>
-    );
-  };
-
-  return (
-    <div className="tab-panel">
-      <div className="personas-grid">
-        {renderCard(report.persona_primary, 'persona-p', '#fef3ed', '#7a2800', '👨')}
-        {renderCard(report.persona_secondary, 'persona-s', '#edf7f2', '#0d3d28', '👩')}
-      </div>
-    </div>
-  );
-}
-
-function SwotTab({ report }: { report: Report }) {
-  const quad = (cls: string, emoji: string, label: string, arr: string[] | undefined, bulletChar: string, bulletColor: string) => {
-    return (
-      <div className={`swot-hm-q ${cls}`}>
-        <div className="swot-hm-header"><span className="swot-hm-icon">{emoji}</span>{label}</div>
-        <div className="swot-hm-items">
-          {(arr || []).map((item, idx) => (
-            <div key={idx} className="swot-hm-item">
-              <span className="swot-hm-bullet" style={{ color: bulletColor, fontWeight: 'bold', fontSize: '14px' }}>{bulletChar}</span>
-              <span>{item}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  };
-
-  const W = 320, H = 220, P = 40;
-  const iW = W - P * 2, iH = H - P * 2;
-  const allItems = [
-    ...(report.strengths || []).map((s, i) => ({ label: s, x: 70 + i * 10, y: 75 - i * 8, color: '#1a6b4a' })),
-    ...(report.weaknesses || []).map((s, i) => ({ label: s, x: 30 + i * 8, y: 35 + i * 5, color: '#d97706' })),
-    ...(report.opportunities || []).map((s, i) => ({ label: s, x: 75 + i * 8, y: 30 + i * 6, color: '#2a5fa5' })),
-    ...(report.threats || []).map((s, i) => ({ label: s, x: 28 + i * 7, y: 68 + i * 7, color: '#be123c' }))
-  ];
-
-  const dots = allItems.map((item, idx) => {
-    const x = P + (item.x / 100) * iW;
-    const y = P + iH - (item.y / 100) * iH;
-    return (
-      <circle key={idx} cx={x} cy={y} r="5" fill={item.color} opacity=".8" stroke="#fff" strokeWidth="1.5">
-        <title>{item.label}</title>
-      </circle>
-    );
-  });
-
-  return (
-    <div className="tab-panel">
-      <div style={{ background: 'var(--bg2)', borderRadius: '12px', padding: '16px', marginBottom: '14px' }}>
-        <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--dim)', textTransform: 'uppercase', letterSpacing: '.7px', marginBottom: '10px' }}>
-          Impact / Likelihood Matrix
-        </div>
-        <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', maxWidth: `${W}px`, height: 'auto' }} xmlns="http://www.w3.org/2000/svg">
-          <rect x={P} y={P} width={iW / 2} height={iH / 2} fill="rgba(190,18,60,.06)" />
-          <rect x={P + iW / 2} y={P} width={iW / 2} height={iH / 2} fill="rgba(42,95,165,.06)" />
-          <rect x={P} y={P + iH / 2} width={iW / 2} height={iH / 2} fill="rgba(217,119,6,.06)" />
-          <rect x={P + iW / 2} y={P + iH / 2} width={iW / 2} height={iH / 2} fill="rgba(26,107,74,.06)" />
-          <line x1={P} y1={P + iH / 2} x2={P + iW} y2={P + iH / 2} stroke="var(--border)" strokeWidth="1" strokeDasharray="4" />
-          <line x1={P + iW / 2} y1={P} x2={P + iW / 2} y2={P + iH} stroke="var(--border)" strokeWidth="1" strokeDasharray="4" />
-          <rect x={P} y={P} width={iW} height={iH} fill="none" stroke="var(--border)" strokeWidth="1" />
-          {dots}
-          <text x={P + iW / 2} y={H - 6} textAnchor="middle" fontSize="10" fill="var(--muted)" fontWeight="600">Impact →</text>
-          <text x="12" y={P + iH / 2} textAnchor="middle" fontSize="10" fill="var(--muted)" fontWeight="600" transform={`rotate(-90,12,${P + iH / 2})`}>Likelihood →</text>
-          <text x={P + 4} y={P + 14} fontSize="9" fill="#be123c" fontWeight="700">THREATS</text>
-          <text x={P + iW - 4} y={P + 14} textAnchor="end" fontSize="9" fill="#2a5fa5" fontWeight="700">OPPORTUNITIES</text>
-          <text x={P + 4} y={P + iH - 6} fontSize="9" fill="#d97706" fontWeight="700">WEAKNESSES</text>
-          <text x={P + iW - 4} y={P + iH - 6} textAnchor="end" fontSize="9" fill="#1a6b4a" fontWeight="700">STRENGTHS</text>
-        </svg>
-      </div>
-      <div className="swot-heatmap">
-        {quad('swot-hm-s', '💪', 'Strengths', report.strengths, '✓', 'var(--acc2)')}
-        {quad('swot-hm-w', '⚠️', 'Weaknesses', report.weaknesses, '⚠', '#be123c')}
-        {quad('swot-hm-o', '🚀', 'Growth Opportunities', report.opportunities, '→', 'var(--acc3)')}
-        {quad('swot-hm-t', '🚨', 'Market Threats', report.threats, '✖', '#be123c')}
-      </div>
-    </div>
-  );
-}
-
-function CompetitorsTab({ report, animate }: { report: Report; animate: boolean }) {
-  const raw = (report.competitors || []).slice(0, 5).map(c => typeof c === 'string' ? { name: c, threat: 'medium', ux: 65, features: 65, pricing: 65, market: 60 } : c);
-  const tc: Record<string, string> = { high: 'comp-tag-threat', medium: 'comp-tag-watch', low: 'comp-tag-minor' };
-  const colors = ['#2a5fa5', '#1a6b4a', '#d4520a', '#b45309', '#7c3aed'];
-
-  const W = 480, H = 240, PL = 60, PB = 36, PT = 16, PR = 16;
-  const iW = W - PL - PR, iH = H - PB - PT;
-  const scX = (v: number) => PL + (v / 100) * iW;
-  const scY = (v: number) => PT + iH - (v / 100) * iH;
-
-  const bubbles = raw.map((c, i) => {
-    const x = scX(c.ux || 65);
-    const y = scY(c.market || 60);
-    const r = 6 + ((c.features || 65) / 100) * 18;
-    return (
-      <g key={i}>
-        <circle cx={x} cy={y} r={r} fill={colors[i]} opacity=".85" stroke="#fff" strokeWidth="1.5" />
-        <text x={x} y={y + 4} textAnchor="middle" fontSize="9" fill="#fff" fontWeight="700">
-          {c.name.split(' ')[0].slice(0, 6)}
-        </text>
-      </g>
-    );
-  });
-
-  const xLabels = [0, 25, 50, 75, 100].map((v, i) => (
-    <text key={i} x={scX(v)} y={H - 8} textAnchor="middle" fontSize="10" fill="var(--muted)">{v}</text>
-  ));
-  const yLabels = [0, 25, 50, 75, 100].map((v, i) => (
-    <text key={i} x={PL - 6} y={scY(v) + 4} textAnchor="end" fontSize="10" fill="var(--muted)">{v}</text>
-  ));
-  const gridX = [25, 50, 75].map((v, i) => (
-    <line key={i} x1={scX(v)} y1={PT} x2={scX(v)} y2={PT + iH} stroke="var(--border)" strokeWidth="1" strokeDasharray="3" />
-  ));
-  const gridY = [25, 50, 75].map((v, i) => (
-    <line key={i} x1={PL} y1={scY(v)} x2={PL + iW} y2={scY(v)} stroke="var(--border)" strokeWidth="1" strokeDasharray="3" />
-  ));
-
-  return (
-    <div className="tab-panel">
-      <div className="comp-layout">
-        <div className="comp-chart-panel" style={{ background: 'var(--bg2)', borderRadius: '12px', padding: '16px', marginBottom: '14px' }}>
-          <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--dim)', textTransform: 'uppercase', letterSpacing: '.7px', marginBottom: '10px' }}>
-            Competitive Positioning Map
-          </div>
-          <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', maxWidth: `${W}px`, height: 'auto' }} xmlns="http://www.w3.org/2000/svg">
-            <rect x={PL} y={PT} width={iW} height={iH} fill="none" stroke="var(--border)" strokeWidth="1" />
-            {gridX}
-            {gridY}
-            {bubbles}
-            {xLabels}
-            {yLabels}
-            <text x={PL + iW / 2} y={H} textAnchor="middle" fontSize="10" fill="var(--muted)" fontWeight="600">UX Quality →</text>
-            <text x="10" y={PT + iH / 2} textAnchor="middle" fontSize="10" fill="var(--muted)" fontWeight="600" transform={`rotate(-90,10,${PT + iH / 2})`}>Market Fit →</text>
-            <text x={PL + iW - 4} y={PT + 14} textAnchor="end" fontSize="9" fill="var(--muted)">Bubble size = Features</text>
-          </svg>
-        </div>
-        <div className="comp-table">
-          {raw.map((c, i) => {
-            const dom = c.name.toLowerCase().replace(/\s/g, '') + '.com';
-            return (
-              <div key={i} className="comp-row">
-                <div className="comp-row-top">
-                  <div className="comp-name" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: colors[i], flexShrink: 0 }}></div>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={`https://www.google.com/s2/favicons?domain=${dom}&sz=32`}
-                      style={{ width: '18px', height: '18px', borderRadius: '3px', objectFit: 'contain' }}
-                      onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
-                      alt={c.name}
-                    />
-                    {c.name}
-                  </div>
-                  <span className={`comp-tag ${tc[c.threat] || 'comp-tag-watch'}`}>{c.threat || 'medium'} threat</span>
-                </div>
-                <div className="comp-bars">
-                  {[
-                    { label: 'UX', val: c.ux || 65 },
-                    { label: 'Features', val: c.features || 65 },
-                    { label: 'Pricing', val: c.pricing || 65 },
-                    { label: 'Market fit', val: c.market || 60 }
-                  ].map((bar, idx) => (
-                    <div key={idx} className="comp-bar-row">
-                      <span className="comp-bar-label">{bar.label}</span>
-                      <div className="comp-bar-track">
-                        <div className="comp-bar-fill" style={{ width: animate ? `${bar.val}%` : '0%', background: colors[i], transition: 'width 0.8s ease' }}></div>
-                      </div>
-                      <span style={{ fontSize: '11px', color: 'var(--muted)', width: '28px', textAlign: 'right' }}>{bar.val}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function JourneyTab({ report }: { report: Report }) {
-  const steps = report.journey || [
-    { stage: 'Discovery', title: 'How users find it', desc: 'Users discover via referral, SEO, or ads.', actions: ['See referral', 'Visit landing page'] },
-    { stage: 'Onboarding', title: 'First-run experience', desc: 'Guided setup and initial value delivery.', actions: ['Create account', 'Complete walkthrough'] },
-    { stage: 'Activation', title: 'The aha moment', desc: 'User completes first meaningful action.', actions: ['Core action', 'See result'] },
-    { stage: 'Retention', title: 'Core habit loop', desc: 'Regular return driven by habit triggers.', actions: ['Return visit', 'Use core feature'] },
-    { stage: 'Referral', title: 'Viral moment', desc: 'Satisfied users share with peers.', actions: ['Invite friend', 'Share output'] }
-  ];
-  const colors = ['#2a5fa5', '#3b82f6', '#10b981', '#1a6b4a', '#6366f1'];
-  const funnelPcts = [100, 72, 55, 38, 24];
-
-  return (
-    <div className="tab-panel">
-      <div style={{ background: 'var(--bg2)', borderRadius: '12px', padding: '16px', marginBottom: '14px' }}>
-        <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--dim)', textTransform: 'uppercase', letterSpacing: '.7px', marginBottom: '14px' }}>
-          Conversion Funnel
-        </div>
-        <div className="funnel-wrap">
-          {steps.map((s, i) => (
-            <React.Fragment key={i}>
-              <div className="funnel-step">
-                <span className="funnel-label" style={{ color: colors[i] }}>{s.stage}</span>
-                <div className="funnel-bar-wrap">
-                  <div className="funnel-bar" style={{ width: `${funnelPcts[i]}%`, background: colors[i], height: '28px', opacity: .85, minWidth: '32px' }}>
-                    <span style={{ fontSize: '11px', fontWeight: 700, color: '#fff', padding: '0 10px' }}>{funnelPcts[i]}%</span>
-                  </div>
-                </div>
-                <span className="funnel-val">{funnelPcts[i]}%</span>
-              </div>
-              {i < steps.length - 1 && <div className="funnel-arrow">🔽</div>}
-            </React.Fragment>
-          ))}
-        </div>
-      </div>
-      <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--dim)', textTransform: 'uppercase', letterSpacing: '.7px', marginBottom: '12px' }}>
-        Detailed Journey
-      </div>
-      <div className="journey-visual">
-        {steps.map((s, i) => (
-          <div key={i} className="jv-step">
-            <div className="jv-left">
-              <div className="jv-circle" style={{ background: colors[i] }}>{i + 1}</div>
-              {i < steps.length - 1 && (
-                <div className="jv-line" style={{ background: `linear-gradient(to bottom, ${colors[i]}, ${colors[i + 1]})` }}></div>
-              )}
-            </div>
-            <div className="jv-card" style={{ borderLeft: `3px solid ${colors[i]}` }}>
-              <div className="jv-stage" style={{ color: colors[i] }}>{s.stage}</div>
-              <div className="jv-title">{s.title}</div>
-              <div className="jv-desc">{s.desc}</div>
-              <div className="jv-actions">
-                {(s.actions || []).map((act: string, aIdx: number) => (
-                  <span key={aIdx} className="jv-tag">{act}</span>
-                ))}
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function MetricsTab({ report, animate }: { report: Report; animate: boolean }) {
-  const mets = report.metrics || [
-    { name: 'North Star', importance: 95, priority: 'high', value: 'DAU/MAU' },
-    { name: 'DAU', importance: 90, priority: 'high', value: 'Daily count' },
-    { name: 'D7 Retention', importance: 85, priority: 'high', value: '% returning' },
-    { name: 'Activation', importance: 80, priority: 'high', value: '% onboarded' },
-    { name: 'Conversion', importance: 75, priority: 'medium', value: 'Free→Paid' },
-    { name: 'Churn', importance: 65, priority: 'medium', value: 'Monthly %' },
-    { name: 'NPS', importance: 60, priority: 'medium', value: '0–100' },
-    { name: 'Feature Adopt.', importance: 55, priority: 'low', value: '% using' }
-  ];
-  const pc: Record<string, string> = { high: '#1a6b4a', medium: '#d4a017', low: '#6b6860' };
-  const pb: Record<string, string> = { high: 'mt-high', medium: 'mt-med', low: 'mt-low' };
-
-  // Gauge helper
-  const renderGauge = (val: number, color: string) => {
-    const r = 28, circ = 2 * Math.PI * r, fill = circ - (val / 100) * circ;
-    return (
-      <svg className="gauge-svg" viewBox="0 0 70 70" width="60" height="60">
-        <circle cx="35" cy="35" r={r} fill="none" stroke="var(--bg3)" strokeWidth="7" />
-        <circle
-          cx="35"
-          cy="35"
-          r={r}
-          fill="none"
-          stroke={color}
-          strokeWidth="7"
-          strokeLinecap="round"
-          strokeDasharray={circ}
-          strokeDashoffset={animate ? fill : circ}
-          style={{ transform: 'rotate(-90deg)', transformOrigin: '50% 50%', transition: 'stroke-dashoffset 0.8s ease' }}
-        />
-        <text x="35" y="39" textAnchor="middle" fontSize="13" fontWeight="700" fill="var(--ink)">{val}</text>
-      </svg>
-    );
-  };
-
-  return (
-    <div className="tab-panel">
-      <div className="gauge-grid" style={{ marginBottom: '16px' }}>
-        {mets.slice(0, 4).map((m, i) => (
-          <div key={i} className="gauge-card">
-            {renderGauge(m.importance, pc[m.priority] || '#6b6860')}
-            <div className="gauge-val">{m.value}</div>
-            <div className="gauge-lbl">{m.name}</div>
-            <div className="gauge-trend" style={{ color: pc[m.priority] || '#6b6860' }}>{m.priority}</div>
-          </div>
-        ))}
-      </div>
-      <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--dim)', textTransform: 'uppercase', letterSpacing: '.7px', marginBottom: '10px' }}>
-        All Metrics — Priority Ranking
-      </div>
-      <div className="metrics-table">
-        <div className="mt-row header"><div>Metric</div><div>Importance</div><div style={{ textAlign: 'center' }}>Score</div><div>Priority</div></div>
-        {mets.map((m, i) => (
-          <div key={i} className="mt-row">
-            <div className="mt-name">
-              {m.name}
-              <div style={{ fontSize: '11px', color: 'var(--dim)', fontWeight: 400 }}>{m.value}</div>
-            </div>
-            <div className="mt-bar-wrap">
-              <div className="mt-bar" style={{ width: animate ? `${m.importance}%` : '0%', background: pc[m.priority] || '#6b6860', transition: 'width 0.8s ease' }}></div>
-            </div>
-            <div style={{ fontSize: '12px', color: 'var(--muted)', textAlign: 'center', fontWeight: 600 }}>{m.importance}%</div>
-            <div><span className={`mt-pri ${pb[m.priority] || 'mt-low'}`}>{m.priority}</span></div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function RiceTab({ report, animate }: { report: Report; animate: boolean }) {
-  const items = report.rice || (report.features || []).slice(0, 5).map((f, i) => ({ feature: f, reach: 9 - i, impact: i < 2 ? 3 : 2, confidence: 90 - i * 5, effort: i < 2 ? 2 : 3 }));
-  const scored = items.map(r => ({ ...r, score: Math.round((r.reach * r.impact * (r.confidence / 100)) / r.effort * 10) })).sort((a, b) => b.score - a.score);
-  const maxScore = scored[0]?.score || 1;
-  const colors = ['#1a6b4a', '#2a5fa5', '#7c3aed', '#6366f1', 'var(--muted)'];
-
-  return (
-    <div className="tab-panel">
-      <div style={{ fontSize: '13px', color: 'var(--acc3-t)', marginBottom: '14px', padding: '10px 14px', background: 'var(--acc3-bg)', border: '1px solid rgba(42,95,165,0.15)', borderRadius: '8px' }}>
-        <strong style={{ color: 'var(--acc3-t)' }}>RICE Formula:</strong> (Reach × Impact × Confidence%) ÷ Effort &nbsp;—&nbsp; Higher score = build first
-      </div>
-      <div className="rice-visual">
-        {scored.map((r, i) => {
-          const pct = Math.round((r.score / maxScore) * 100);
-          const isTop = i === 0;
-          return (
-            <div key={i} className={`rice-vis-row ${isTop ? 'top-rice' : ''}`}>
-              <div style={{ position: 'absolute', top: 0, left: 0, bottom: 0, width: animate ? `${pct}%` : '0%', background: colors[i], opacity: .07, borderRadius: '10px', transition: 'width 0.9s ease' }}></div>
-              <div className="rice-vis-header">
-                <div>
-                  <div className="rice-vis-name">{isTop ? '⭐ ' : ''}{r.feature}</div>
-                  <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '2px' }}>
-                    Reach {r.reach} · Impact {r.impact} · Conf. {r.confidence}% · Effort {r.effort}
-                  </div>
-                </div>
-                <div>
-                  <div className="rice-vis-score" style={{ color: colors[i] }}>{r.score}</div>
-                  <div style={{ fontSize: '10px', color: 'var(--muted)', textAlign: 'right' }}>RICE score</div>
-                </div>
-              </div>
-              <div className="rice-vis-bars">
-                {[
-                  { label: 'Reach', val: r.reach, max: 10 },
-                  { label: 'Impact', val: r.impact, max: 3 },
-                  { label: 'Confidence', val: r.confidence, max: 100 },
-                  { label: 'Effort', val: r.effort, max: 5, bg: 'var(--border)' }
-                ].map((dim, idx) => {
-                  const fillPct = Math.round((dim.val / dim.max) * 100);
-                  return (
-                    <div key={idx} className="rice-dim">
-                      <div className="rice-dim-label">{dim.label}</div>
-                      <div className="rice-dim-track">
-                        <div className="rice-dim-fill" style={{ width: animate ? `${fillPct}%` : '0%', background: dim.bg || colors[i], transition: 'width 0.8s ease' }}></div>
-                      </div>
-                      <div className="rice-dim-val">
-                        {dim.label === 'Confidence' ? `${dim.val}%` : `${dim.val}/${dim.max}`}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function PrdTab({ report }: { report: Report }) {
-  const p = report.prd || {
-    feature: (report.features || ['Top feature'])[0],
-    objective: 'Improve core user experience and drive measurable engagement.',
-    user_story: 'As a product user, I want this feature so that I can achieve my goal faster.',
-    acceptance_criteria: ['Works on all devices', 'Loads in under 2 seconds', 'Accessible to all users', 'Analytics tracked'],
-    success_metrics: ['10% increase in DAU', '5% churn reduction', 'NPS +8'],
-    open_questions: ['What is the rollout plan?', 'How do we define success at 30 days?']
-  };
-
-  const story = p.user_story || '';
-  const asA = story.match(/As a ([^,]+)/i)?.[1] || 'user';
-  const iWant = story.match(/I want (.+?) so that/i)?.[1] || story;
-  const soThat = story.match(/so that (.+)/i)?.[1] || 'achieve their goal';
-
-  return (
-    <div className="tab-panel">
-      <div className="prd-visual">
-        <div className="prd-hero">
-          <div className="prd-hero-kicker">Feature Specification</div>
-          <div className="prd-hero-title">{p.feature}</div>
-          <div className="prd-hero-desc">{p.objective}</div>
-        </div>
-        <div className="prd-vis-block">
-          <div className="prd-vis-label">User Story</div>
-          <div className="prd-story-parts">
-            <div className="prd-story-part">
-              <span className="prd-story-tag" style={{ background: 'var(--bg3)', color: 'var(--muted)' }}>AS A</span>
-              <span style={{ fontSize: '13px', color: 'var(--ink)' }}>{asA}</span>
-            </div>
-            <div className="prd-story-part">
-              <span className="prd-story-tag" style={{ background: 'var(--acc2-bg)', color: 'var(--acc2-t)' }}>I WANT</span>
-              <span style={{ fontSize: '13px', color: 'var(--ink)' }}>{iWant}</span>
-            </div>
-            <div className="prd-story-part">
-              <span className="prd-story-tag" style={{ background: 'var(--acc3-bg)', color: 'var(--acc3-t)' }}>SO THAT</span>
-              <span style={{ fontSize: '13px', color: 'var(--ink)' }}>{soThat}</span>
-            </div>
-          </div>
-        </div>
-        <div className="prd-two-col">
-          <div className="prd-vis-block">
-            <div className="prd-vis-label">Acceptance Criteria</div>
-            {(p.acceptance_criteria || []).map((ac: string, idx: number) => (
-              <div key={idx} className="prd-ac-item">
-                <div className="prd-check">✓</div>
-                <span>{ac}</span>
-              </div>
-            ))}
-          </div>
-          <div className="prd-vis-block">
-            <div className="prd-vis-label">Success Metrics</div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '4px' }}>
-              {(p.success_metrics || []).map((sm: string, idx: number) => (
-                <span key={idx} className="pill" style={{ background: 'var(--acc2-bg)', color: 'var(--acc2-t)', borderColor: '#b6deca' }}>
-                  {sm}
-                </span>
-              ))}
-            </div>
-            <div className="prd-vis-label" style={{ marginTop: '16px' }}>Open Questions</div>
-            {(p.open_questions || []).map((oq: string, idx: number) => (
-              <div key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
-                <div style={{ width: '22px', height: '22px', borderRadius: '6px', background: 'var(--acc3-bg)', border: '1px solid #b6d0f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 700, color: 'var(--acc3)', flexShrink: 0 }}>
-                  Q{idx + 1}
-                </div>
-                <span style={{ fontSize: '13px', color: 'var(--muted)', lineHeight: '1.6' }}>{oq}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 // ────────────────────────────────────────────────────────────────
 // FAQ SUB-COMPONENT

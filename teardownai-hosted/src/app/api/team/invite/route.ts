@@ -3,11 +3,10 @@ import { db } from '@/lib/db';
 
 export async function POST(req: NextRequest) {
   try {
-    const authHeader = req.headers.get('authorization');
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    const token = req.cookies.get('auth_token')?.value;
+    if (!token) {
       return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
     }
-    const token = authHeader.split(' ')[1];
     const user = await db.getUserByToken(token);
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });

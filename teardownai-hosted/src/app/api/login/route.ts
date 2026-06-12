@@ -34,10 +34,15 @@ export async function POST(req: NextRequest) {
 
     const sanitized = sanitizeUser(updatedUser);
 
-    return NextResponse.json({
-      token,
-      ...sanitized
+    const response = NextResponse.json(sanitized);
+    response.cookies.set('auth_token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 60 * 60 * 24 * 7, // 7 days
+      path: '/'
     });
+    return response;
   } catch (err: any) {
     console.error('API login route error:', err.message);
     return NextResponse.json({ error: 'Server error during authentication.' }, { status: 500 });
