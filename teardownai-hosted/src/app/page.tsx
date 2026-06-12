@@ -91,51 +91,7 @@ export default function LandingPage() {
   const initRef = useRef(false);
   const [stats, setStats] = useState({ teardowns: '14,000+', users: '5,400+' });
 
-  // Load configuration and session
-  useEffect(() => {
-    if (initRef.current) return;
-    initRef.current = true;
 
-    // Theme
-    const savedTheme = localStorage.getItem('theme') || 'dark';
-    setTheme(savedTheme as 'light' | 'dark');
-    document.body.classList.toggle('dark-theme', savedTheme === 'dark');
-
-    // Token
-    const savedToken = localStorage.getItem('auth_token');
-    if (savedToken) {
-      setToken(savedToken);
-      fetchSession(savedToken);
-    } else {
-      // Guest path: trigger immediately since there's no session to wait for
-      const params = new URLSearchParams(window.location.search);
-      const queryQ = params.get('q');
-      if (queryQ) {
-        setSearchQuery(queryQ);
-        triggerAnalysis(queryQ, null, null);
-      }
-    }
-
-    // URL Query Routing
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('auth') === 'true') {
-      setIsAuthModalOpen(true);
-      setAuthTab('login');
-    }
-
-    // Dynamic stats
-    fetch('/api/stats')
-      .then(res => res.json())
-      .then(data => {
-        if (data.teardowns && data.users) {
-          setStats({
-            teardowns: data.teardowns.toLocaleString() + '+',
-            users: data.users.toLocaleString() + '+'
-          });
-        }
-      })
-      .catch(() => {});
-  }, [fetchSession, triggerAnalysis]);
 
   // Sync theme to body
   const toggleTheme = () => {
@@ -779,6 +735,52 @@ Ensure all numerical scores and ratings are realistic (0-100). Competitor arrays
       console.error('Session validation error:', err);
     }
   }, [fetchReports, triggerAnalysis]);
+
+  // Load configuration and session
+  useEffect(() => {
+    if (initRef.current) return;
+    initRef.current = true;
+
+    // Theme
+    const savedTheme = localStorage.getItem('theme') || 'dark';
+    setTheme(savedTheme as 'light' | 'dark');
+    document.body.classList.toggle('dark-theme', savedTheme === 'dark');
+
+    // Token
+    const savedToken = localStorage.getItem('auth_token');
+    if (savedToken) {
+      setToken(savedToken);
+      fetchSession(savedToken);
+    } else {
+      // Guest path: trigger immediately since there's no session to wait for
+      const params = new URLSearchParams(window.location.search);
+      const queryQ = params.get('q');
+      if (queryQ) {
+        setSearchQuery(queryQ);
+        triggerAnalysis(queryQ, null, null);
+      }
+    }
+
+    // URL Query Routing
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('auth') === 'true') {
+      setIsAuthModalOpen(true);
+      setAuthTab('login');
+    }
+
+    // Dynamic stats
+    fetch('/api/stats')
+      .then(res => res.json())
+      .then(data => {
+        if (data.teardowns && data.users) {
+          setStats({
+            teardowns: data.teardowns.toLocaleString() + '+',
+            users: data.users.toLocaleString() + '+'
+          });
+        }
+      })
+      .catch(() => {});
+  }, [fetchSession, triggerAnalysis]);
 
   // Curated teaser runner
   const loadSample = (name: string) => {
