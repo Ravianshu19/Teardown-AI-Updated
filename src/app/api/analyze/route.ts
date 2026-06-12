@@ -11,7 +11,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    body.model = process.env.ANTHROPIC_MODEL || body.model || 'claude-3-5-sonnet-20241022';
+    body.model = process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20241022';
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {

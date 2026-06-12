@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { Report, TeamMember, User } from './types';
+import { User } from './types';
 
 // ────────────────────────────────────────────────────────────────
 // LOCAL FILE DATABASE ADAPTER
@@ -46,7 +46,8 @@ async function getMongoClient() {
   let isConnected = false;
   if (client) {
     try {
-      isConnected = client.topology && client.topology.isConnected();
+      await client.db().command({ ping: 1 });
+      isConnected = true;
     } catch (e) {
       isConnected = false;
     }
@@ -74,6 +75,30 @@ async function getMongoCollection() {
 export const db = {
   isCloud(): boolean {
     return !!process.env.MONGODB_URI;
+  },
+
+  async getStats(): Promise<{ usersCount: number; teardownsCount: number }> {
+    if (this.isCloud()) {
+      try {
+        const col = await getMongoCollection();
+        const usersCount = await col.countDocuments();
+        const reportsAggregation = await col.aggregate([
+          { $project: { reportsCount: { $size: { $ifNull: [ "$reports", [] ] } } } },
+          { $group: { _id: null, total: { $sum: "$reportsCount" } } }
+        ]).toArray();
+        const teardownsCount = reportsAggregation[0]?.total || 0;
+        return { usersCount, teardownsCount };
+      } catch (err) {
+        console.error('MongoDB getStats error:', err);
+        return { usersCount: 0, teardownsCount: 0 };
+      }
+    }
+
+    const local = loadLocalDB();
+    const users = Object.values(local.users);
+    const usersCount = users.length;
+    const teardownsCount = users.reduce((acc, u) => acc + (u.reports ? u.reports.length : 0), 0);
+    return { usersCount, teardownsCount };
   },
 
   async getUser(email: string): Promise<User | null> {
