@@ -19,12 +19,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing signature details or plan.' }, { status: 400 });
     }
 
-    const RZP_SEC = process.env.RAZORPAY_KEY_SECRET || '369647Ya8uijAO1Z5gxbI2Nl';
+    const RZP_SEC = process.env.RAZORPAY_KEY_SECRET;
+    const isMock = razorpay_signature === 'sig_mock_signature' && process.env.NODE_ENV === 'development';
 
-    const body = razorpay_order_id + '|' + razorpay_payment_id;
-    const expected = crypto.createHmac('sha256', RZP_SEC).update(body).digest('hex');
+    let isVerified = false;
+    if (isMock) {
+      isVerified = true;
+    } else if (RZP_SEC) {
+      const body = razorpay_order_id + '|' + razorpay_payment_id;
+      const expected = crypto.createHmac('sha256', RZP_SEC).update(body).digest('hex');
+      isVerified = (expected === razorpay_signature);
+    }
 
-    if (expected === razorpay_signature) {
+    if (isVerified) {
       const normalizedPlan = plan.toLowerCase();
       user.plan = normalizedPlan === 'pro' ? 'Pro' : (normalizedPlan === 'student' ? 'Student' : 'Free');
       user.credits = normalizedPlan === 'pro' ? 500 : (normalizedPlan === 'student' ? 15 : 10);
