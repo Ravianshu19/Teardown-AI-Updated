@@ -23,35 +23,10 @@ import {
   ChevronRight,
   Send,
   UserCheck,
-  AlertTriangle
+  AlertTriangle,
+  Activity
 } from 'lucide-react';
-
-interface Report {
-  id?: string;
-  name: string;
-  score: number;
-  score_ux: number;
-  score_market: number;
-  score_moat: number;
-  score_growth: number;
-  score_revenue: number;
-  score_retention: number;
-  date: string;
-  ts: number;
-  domain?: string;
-  col: string;
-  saved: boolean;
-  note: string;
-}
-
-interface TeamMember {
-  initials: string;
-  name: string;
-  role: string;
-  tears: number;
-  lastActive: string;
-  col: string;
-}
+import { Report, TeamMember } from '@/lib/types';
 
 interface UserState {
   name: string;
@@ -73,6 +48,7 @@ export default function PortalPage() {
   const [user, setUser] = useState<UserState | null>(null);
   const [reports, setReports] = useState<Report[]>([]);
   const [activeView, setActiveView] = useState<string>('dashboard');
+  const [razorpayKey, setRazorpayKey] = useState<string>('');
 
   // Mobile navigation
   const [isMobNavOpen, setIsMobNavOpen] = useState(false);
@@ -151,6 +127,7 @@ export default function PortalPage() {
       }
 
       const sessionData = await res.json();
+      setRazorpayKey(sessionData.razorpayKey || '');
       setUser({
         name: sessionData.name,
         email: sessionData.email,
@@ -288,62 +265,163 @@ export default function PortalPage() {
     }
   };
 
-  // Simulated upgrade payments (Razorpay signatures verification)
+  // Upgrade payments (Razorpay checkout integration with simulation fallback)
   const handleBuyPlan = async (planName: string) => {
     if (!token) {
       showToast('Sign in to upgrade.', 'warn');
       return;
     }
 
-    showToast('Initiating checkout (Razorpay simulated)...', 'ok');
-    
-    setTimeout(async () => {
-      const razorpay_order_id = 'order_' + Math.random().toString(36).substring(2, 10);
-      const razorpay_payment_id = 'pay_' + Math.random().toString(36).substring(2, 10);
-      const razorpay_signature = 'sig_mock_signature';
+    const normalizedPlan = planName.toLowerCase();
+    if (normalizedPlan === 'free') {
+      verifyPaymentOnServer('order_free_downgrade', 'pay_free_downgrade', 'sig_mock_signature', 'free');
+      return;
+    }
+
+    // Real Razorpay modal open if script is loaded and key is configured
+    if (typeof window !== 'undefined' && (window as any).Razorpay && razorpayKey) {
+      const amount = planName === 'pro' ? 149900 : 19900; // in paise
+      const description = planName === 'pro' ? 'Pro Subscription — Unlimited credits' : 'Student Subscription — 15 credits';
+
+      const options = {
+        key: razorpayKey,
+        amount: amount,
+        currency: 'INR',
+        name: 'TeardownAI',
+        description: description,
+        prefill: {
+          name: user?.name || '',
+          email: user?.email || '',
+        },
+        theme: { color: '#d4520a' },
+        handler: async function (response: any) {
+          const paymentId = response.razorpay_payment_id;
+          const orderId = response.razorpay_order_id || 'order_' + Math.random().toString(36).substring(2, 10);
+          const signature = response.razorpay_signature || 'sig_mock_signature';
+
+          verifyPaymentOnServer(orderId, paymentId, signature, planName);
+        },
+        modal: {
+          ondismiss: () => showToast('Payment cancelled', ''),
+        }
+      };
 
       try {
-        const res = await fetch('/api/verify-payment', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`
-          },
-          body: JSON.stringify({
-            razorpay_order_id,
-            razorpay_payment_id,
-            razorpay_signature,
-            plan: planName
-          })
-        });
-        const data = await res.json();
-        if (data.verified) {
-          setUser(prev => prev ? { ...prev, plan: data.plan, credits: data.credits, maxCreds: data.maxCreds } : null);
-          showToast(`Upgraded to ${data.plan} successfully!`, 'ok');
-        } else {
-          showToast('Payment verification failed.', 'warn');
-        }
+        const rzp = new (window as any).Razorpay(options);
+        rzp.open();
       } catch (err) {
-        showToast('Payment verification failed.', 'warn');
+        console.error('Razorpay modal error:', err);
+        showToast('Failed to open payment gateway.', 'warn');
       }
-    }, 1500);
-  };
-
-  // Settings save handler
-  const handleSaveSetting = (key: 'name' | 'email') => {
-    if (key === 'name') {
-      setUser(prev => prev ? { ...prev, name: setFieldUsername } : null);
-      showToast('Name saved!', 'ok');
     } else {
-      setUser(prev => prev ? { ...prev, email: setFieldEmail } : null);
-      showToast('Email updated!', 'ok');
+      // Simulation Fallback
+      showToast('Initiating checkout (Razorpay simulated)...', 'ok');
+      setTimeout(async () => {
+        const razorpay_order_id = 'order_' + Math.random().toString(36).substring(2, 10);
+        const razorpay_payment_id = 'pay_' + Math.random().toString(36).substring(2, 10);
+        const razorpay_signature = 'sig_mock_signature';
+
+        verifyPaymentOnServer(razorpay_order_id, razorpay_payment_id, razorpay_signature, planName);
+      }, 1500);
     }
   };
 
-  // Clear session history local reports
-  const handleClearHistory = () => {
-    setReports([]);
-    showToast('History cleared');
+  const verifyPaymentOnServer = async (orderId: string, paymentId: string, signature: string, planName: string) => {
+    try {
+      const res = await fetch('/api/verify-payment', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          razorpay_order_id: orderId,
+          razorpay_payment_id: paymentId,
+          razorpay_signature: signature,
+          plan: planName
+        })
+      });
+      const data = await res.json();
+      if (data.verified) {
+        setUser(prev => prev ? { ...prev, plan: data.plan, credits: data.credits, maxCreds: data.maxCreds } : null);
+        showToast(`Upgraded to ${data.plan} successfully!`, 'ok');
+      } else {
+        showToast('Payment verification failed.', 'warn');
+      }
+    } catch (err) {
+      showToast('Payment verification failed.', 'warn');
+    }
+  };
+
+  // Settings save handler (persisted on server)
+  const handleSaveSetting = async (key: 'name' | 'email') => {
+    if (!token) return;
+    const payload = key === 'name' ? { name: setFieldUsername } : { email: setFieldEmail };
+    try {
+      const res = await fetch('/api/session', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify(payload)
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setUser(prev => prev ? { ...prev, name: data.name, email: data.email } : null);
+        showToast(key === 'name' ? 'Name saved!' : 'Email updated!', 'ok');
+      } else {
+        const err = await res.json();
+        showToast(err.error || 'Failed to save settings.', 'warn');
+      }
+    } catch (err) {
+      showToast('Error saving settings.', 'warn');
+    }
+  };
+
+  // Clear session history (persisted on server)
+  const handleClearHistory = async () => {
+    if (!token) return;
+    try {
+      const res = await fetch('/api/reports', {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        setReports([]);
+        showToast('History cleared', 'ok');
+      } else {
+        showToast('Failed to clear history on server.', 'warn');
+      }
+    } catch (err) {
+      showToast('Error clearing history.', 'warn');
+    }
+  };
+
+  // Delete user account permanently
+  const handleDeleteAccount = async () => {
+    if (!token) return;
+    if (!window.confirm('Are you absolutely sure you want to permanently delete your account? This action cannot be undone.')) {
+      return;
+    }
+    try {
+      const res = await fetch('/api/session', {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        localStorage.removeItem('auth_token');
+        setUser(null);
+        showToast('Account deleted successfully.', 'ok');
+        setTimeout(() => {
+          router.push('/');
+        }, 1500);
+      } else {
+        showToast('Failed to delete account.', 'warn');
+      }
+    } catch (err) {
+      showToast('Error deleting account.', 'warn');
+    }
   };
 
   // Nav menu actions
@@ -358,8 +436,8 @@ export default function PortalPage() {
     { key: 'settings', label: 'Settings', icon: <Settings size={16} /> }
   ];
 
-  // Filter menu choices (only developer sees team option)
-  const isDeveloper = user?.email?.toLowerCase().includes('developer');
+  // Filter menu choices (only developer or Pro plan sees team option)
+  const isDeveloper = user?.plan === 'Pro' || user?.email?.toLowerCase().includes('developer');
   const visibleMenu = menuOptions.filter(opt => !opt.devOnly || isDeveloper);
 
   const getScoreColor = (s: number) => {
@@ -385,7 +463,7 @@ export default function PortalPage() {
           <div className="logo-mark" style={{ background: 'none', border: '1.5px solid var(--ink)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', position: 'relative', overflow: 'hidden', width: '28px', height: '28px', borderRadius: '6px', flexShrink: 0 }}>
             <svg viewBox="0 0 100 100" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', opacity: 0.35 }}>
               <line x1="0" y1="50" x2="100" y2="50" stroke="currentColor" strokeWidth="6" strokeDasharray="10 6" />
-              <line x1="50" y1="0" x2="50" y2="100" stroke="currentColor" strokeWidth="6" stroke-dasharray="10 6" />
+              <line x1="50" y1="0" x2="50" y2="100" stroke="currentColor" strokeWidth="6" strokeDasharray="10 6" />
               <circle cx="50" cy="50" r="42" fill="none" stroke="currentColor" strokeWidth="6" strokeDasharray="8 8" />
             </svg>
             <span style={{ fontFamily: 'var(--fh)', fontWeight: 800, fontSize: '15px', color: 'var(--ink)', position: 'relative', zIndex: 1 }}>T</span>
@@ -552,6 +630,7 @@ export default function PortalPage() {
                 <BillingView
                   user={user}
                   handleBuyPlan={handleBuyPlan}
+                  router={router}
                 />
               )}
               {activeView === 'settings' && (
@@ -566,6 +645,7 @@ export default function PortalPage() {
                   reportsLength={reports.length}
                   handleClearHistory={handleClearHistory}
                   handleSaveSetting={handleSaveSetting}
+                  handleDeleteAccount={handleDeleteAccount}
                   showToast={showToast}
                 />
               )}
@@ -611,7 +691,7 @@ function DashboardView({
   const saved = reports.filter(r => r.saved).length;
   const credits = user ? user.credits : 10;
   const maxCreds = user ? user.maxCreds : 10;
-  const pct = Math.round(((maxCreds - credits) / maxCreds) * 100);
+  const pct = maxCreds > 0 ? Math.round(((maxCreds - credits) / maxCreds) * 100) : 0;
   const today = reports.filter(r => r.ts > Date.now() - 86400000).length;
 
   // Portfolio Diagnostics
@@ -750,11 +830,11 @@ function DashboardView({
         <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '20px' }} className="dash-charts-grid">
           <div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifySpace: 'space-between', padding: '6px 10px', background: 'rgba(26, 107, 74, 0.06)', borderRadius: '8px', border: '1px solid rgba(26, 107, 74, 0.15)', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', padding: '6px 10px', background: 'rgba(26, 107, 74, 0.06)', borderRadius: '8px', border: '1px solid rgba(26, 107, 74, 0.15)', justifyContent: 'space-between' }}>
                 <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--muted)' }}>Top Strength</span>
                 <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--acc2)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>💪 {topStrength}</span>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', justifySpace: 'space-between', padding: '6px 10px', background: 'rgba(190, 18, 60, 0.06)', borderRadius: '8px', border: '1px solid rgba(190, 18, 60, 0.15)', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', padding: '6px 10px', background: 'rgba(190, 18, 60, 0.06)', borderRadius: '8px', border: '1px solid rgba(190, 18, 60, 0.15)', justifyContent: 'space-between' }}>
                 <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--muted)' }}>Weakest Area</span>
                 <span style={{ fontSize: '12px', fontWeight: 700, color: '#be123c', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>⚠️ {weakestArea}</span>
               </div>
@@ -840,9 +920,9 @@ function DashboardView({
       <div className="p-title" style={{ marginBottom: '10px' }}>Recent teardowns</div>
       <div className="tlist">
         {reports.length > 0 ? (
-          reports.slice(0, 5).map((r, idx) => (
+          reports.slice(0, 5).map((r) => (
             <ReportItemRow
-              key={idx}
+              key={r.id}
               report={r}
               reports={reports}
               getScoreColor={getScoreColor}
@@ -911,9 +991,9 @@ function ReportsView({
       </div>
       <div className="tlist" id="report-list">
         {sorted.length > 0 ? (
-          sorted.map((r, idx) => (
+          sorted.map((r) => (
             <ReportItemRow
-              key={idx}
+              key={r.id}
               report={r}
               reports={reports}
               getScoreColor={getScoreColor}
@@ -949,9 +1029,9 @@ function SavedView({
       <div className="p-title">Saved <span style={{ fontSize: '13px', fontWeight: 400, color: 'var(--muted)' }}>({savedItems.length})</span></div>
       <div className="tlist">
         {savedItems.length > 0 ? (
-          savedItems.map((r, idx) => (
+          savedItems.map((r) => (
             <ReportItemRow
-              key={idx}
+              key={r.id}
               report={r}
               reports={reports}
               getScoreColor={getScoreColor}
@@ -998,14 +1078,14 @@ function TeamView({
         {members.map((m, idx) => {
           const isYou = idx === 0;
           return (
-            <div key={idx} className="ti">
+            <div key={m.email || idx} className="ti">
               <div className="ti-l">
                 <div className={`ti-icon ${m.col}`} style={{ fontSize: '12px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   {m.initials}
                 </div>
                 <div className="ti-info">
                   <div className="ti-name">{m.name}{isYou ? ' (You)' : ''}</div>
-                  <div className="ti-date">{m.tears} teardowns · {m.lastActive}</div>
+                  <div className="ti-date">{m.email || m.name} · {m.tears} teardowns · {m.lastActive}</div>
                 </div>
               </div>
               <div className="ti-r">
@@ -1016,7 +1096,7 @@ function TeamView({
                     <button className="ti-btn" onClick={() => showToast(`Invite resent to ${m.name.split(' ')[0]}`)}>
                       <Send size={13} />
                     </button>
-                    <button className="ti-btn" style={{ color: '#be123c' }} onClick={() => handleRemoveTeamMember(m.name)}>
+                    <button className="ti-btn" style={{ color: '#be123c' }} onClick={() => handleRemoveTeamMember(m.email || m.name)}>
                       <Trash2 size={13} />
                     </button>
                   </div>
@@ -1075,9 +1155,9 @@ function HistoryView({
               {lbl}
             </div>
             <div className="tlist">
-              {items.map((r, itemIdx) => (
+              {items.map((r) => (
                 <ReportItemRow
-                  key={itemIdx}
+                  key={r.id}
                   report={r}
                   reports={reports}
                   getScoreColor={getScoreColor}
@@ -1107,7 +1187,7 @@ function ExportsView({ reports, router, exportPDF }: { reports: Report[]; router
           reports.slice(0, 5).map((h, i) => {
             const init = (h.name || '?').charAt(0).toUpperCase();
             return (
-              <div key={i} className="ti">
+              <div key={h.id} className="ti">
                 <div className="ti-l">
                   <div className={`ti-icon ${cols[i % 3]}`} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     {h.domain ? (
@@ -1149,11 +1229,11 @@ function ExportsView({ reports, router, exportPDF }: { reports: Report[]; router
   );
 }
 
-function BillingView({ user, handleBuyPlan }: { user: UserState | null; handleBuyPlan: (p: string) => void }) {
+function BillingView({ user, handleBuyPlan, router }: { user: UserState | null; handleBuyPlan: (p: string) => void; router: any }) {
   const credits = user ? user.credits : 10;
   const maxCreds = user ? user.maxCreds : 10;
   const used = maxCreds - credits;
-  const pct = Math.round((used / maxCreds) * 100);
+  const pct = maxCreds > 0 ? Math.round((used / maxCreds) * 100) : 0;
 
   const planPrice = user?.plan === 'Pro' ? '₹1,499/mo' : (user?.plan === 'Student' ? '₹199/mo' : 'Free');
   const planRenew = user?.plan !== 'Free' ? new Date(Date.now() + 30 * 24 * 3600 * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Never';
@@ -1204,6 +1284,7 @@ function SettingsView({
   reportsLength,
   handleClearHistory,
   handleSaveSetting,
+  handleDeleteAccount,
   showToast
 }: {
   user: UserState | null;
@@ -1216,6 +1297,7 @@ function SettingsView({
   reportsLength: number;
   handleClearHistory: () => void;
   handleSaveSetting: (k: 'name' | 'email') => void;
+  handleDeleteAccount: () => void;
   showToast: (m: string) => void;
 }) {
   return (
@@ -1232,9 +1314,9 @@ function SettingsView({
         
         <div className="ti" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '10px', padding: '16px' }}>
           <div style={{ fontSize: '13px', fontWeight: 600 }}>Email address</div>
-          <div style={{ display: 'flex', gap: '8px', width: '100%', flexWrap: 'wrap' }}>
-            <input className="inp" style={{ flex: 1, minWidth: '140px', padding: '8px 12px', fontSize: '13px' }} value={setFieldEmail} onChange={e => setSetFieldEmail(e.target.value)} />
-            <button className="r-btn r-btn-p" onClick={() => handleSaveSetting('email')}>Update</button>
+          <div style={{ display: 'flex', gap: '8px', width: '100%', flexWrap: 'wrap', alignItems: 'center' }}>
+            <input className="inp" style={{ flex: 1, minWidth: '140px', padding: '8px 12px', fontSize: '13px', opacity: 0.7, cursor: 'not-allowed' }} value={setFieldEmail} readOnly disabled />
+            <span style={{ fontSize: '11px', color: 'var(--muted)' }}>Email cannot be changed</span>
           </div>
         </div>
         
@@ -1272,7 +1354,7 @@ function SettingsView({
             </div>
           </div>
           <div className="ti-r">
-            <button className="ti-btn" onClick={() => showToast('Contact support to delete your account')} style={{ color: '#be123c', borderColor: '#f5c3c3' }}>Delete</button>
+            <button className="ti-btn" onClick={handleDeleteAccount} style={{ color: '#be123c', borderColor: '#f5c3c3' }}>Delete</button>
           </div>
         </div>
       </div>
@@ -1300,9 +1382,6 @@ function ReportItemRow({
   router: any;
 }) {
   const initial = (report.name || '?').charAt(0).toUpperCase();
-  const starPath = report.saved
-    ? 'M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z'
-    : 'M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z';
 
   return (
     <div className="ti">
@@ -1337,9 +1416,7 @@ function ReportItemRow({
             <ExternalLink size={13} />
           </button>
           <button className="ti-btn" title={report.saved ? 'Unsave' : 'Save'} onClick={() => toggleSaveReport(report)}>
-            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24">
-              <path d={starPath} fill={report.saved ? '#d4a017' : 'none'} stroke={report.saved ? '#d4a017' : 'currentColor'} strokeWidth={report.saved ? '1' : '2'} />
-            </svg>
+            <Star size={13} fill={report.saved ? '#d4a017' : 'none'} color={report.saved ? '#d4a017' : 'currentColor'} />
           </button>
           <button className="ti-btn" title="Delete" onClick={() => handleDeleteReport(report)} style={{ color: '#be123c' }}>
             <Trash2 size={13} />
