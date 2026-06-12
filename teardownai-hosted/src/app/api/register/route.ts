@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
-import { db, User } from '@/lib/db';
+import { db } from '@/lib/db';
+import { User, sanitizeUser } from '@/lib/types';
 
 function hashPassword(password: string, salt: string) {
-  return crypto.pbkdf2Sync(password, salt, 1000, 64, 'sha512').toString('hex');
+  return crypto.pbkdf2Sync(password, salt, 600000, 64, 'sha512').toString('hex');
 }
 
 export async function POST(req: NextRequest) {
@@ -11,6 +12,10 @@ export async function POST(req: NextRequest) {
     const { name, email, password } = await req.json();
     if (!name || !email || !password) {
       return NextResponse.json({ error: 'Name, email, and password are required.' }, { status: 400 });
+    }
+
+    if (password.trim().length < 8) {
+      return NextResponse.json({ error: 'Password must be at least 8 characters.' }, { status: 400 });
     }
 
     const lowerEmail = email.toLowerCase().trim();
@@ -23,7 +28,7 @@ export async function POST(req: NextRequest) {
     const passwordHash = hashPassword(password, salt);
     const token = crypto.randomBytes(24).toString('hex');
 
-    const isDeveloper = lowerEmail.includes('developer');
+    const isDeveloper = lowerEmail.endsWith('@teardownai.com') || (lowerEmail.includes('developer') && process.env.NODE_ENV === 'development');
     const initials = name
       .split(' ')
       .map((n: string) => n[0])
@@ -43,6 +48,7 @@ export async function POST(req: NextRequest) {
       reports: isDeveloper
         ? [
             {
+              id: 'seed_notion',
               name: 'Notion',
               score: 88,
               score_ux: 85,
@@ -59,6 +65,7 @@ export async function POST(req: NextRequest) {
               note: '',
             },
             {
+              id: 'seed_stripe',
               name: 'Stripe',
               score: 94,
               score_ux: 90,
@@ -75,6 +82,7 @@ export async function POST(req: NextRequest) {
               note: 'Great revenue model',
             },
             {
+              id: 'seed_figma',
               name: 'Figma',
               score: 91,
               score_ux: 92,
@@ -94,23 +102,20 @@ export async function POST(req: NextRequest) {
         : [],
       team: isDeveloper
         ? [
-            { initials, name: name + ' (Admin)', role: 'admin', tears: 0, lastActive: 'Online now', col: 'ic-g' },
-            { initials: 'AR', name: 'Ananya R.', role: 'member', tears: 12, lastActive: '1 day ago', col: 'ic-b' },
-            { initials: 'MK', name: 'Mohan K.', role: 'member', tears: 7, lastActive: '3 days ago', col: 'ic-o' },
+            { initials, name: name + ' (Admin)', email: lowerEmail, role: 'admin', tears: 0, lastActive: 'Online now', col: 'ic-g' },
+            { initials: 'AR', name: 'Ananya R.', email: 'ananya.r@teardownai.com', role: 'member', tears: 12, lastActive: '1 day ago', col: 'ic-b' },
+            { initials: 'MK', name: 'Mohan K.', email: 'mohan.k@teardownai.com', role: 'member', tears: 7, lastActive: '3 days ago', col: 'ic-o' },
           ]
-        : [{ initials, name: name + ' (Admin)', role: 'admin', tears: 0, lastActive: 'Online now', col: 'ic-g' }],
+        : [{ initials, name: name + ' (Admin)', email: lowerEmail, role: 'admin', tears: 0, lastActive: 'Online now', col: 'ic-g' }],
     };
 
     await db.saveUser(newUser);
 
+    const sanitized = sanitizeUser(newUser);
+
     return NextResponse.json({
       token,
-      name,
-      email: lowerEmail,
-      plan: newUser.plan,
-      credits: newUser.credits,
-      maxCreds: newUser.maxCreds,
-      team: newUser.team,
+      ...sanitized
     });
   } catch (err: any) {
     console.error('API register route error:', err.message);
