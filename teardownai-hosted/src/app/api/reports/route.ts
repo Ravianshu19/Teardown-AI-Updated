@@ -44,9 +44,24 @@ export async function POST(req: NextRequest) {
     report.ts = report.ts || Date.now();
     report.date = report.date || new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
-    // Decrement user credit
+    // Decrement user credit only if this is a new report (not an update/re-save)
+    const existingReports = user.reports || [];
+    const existing = existingReports.find((r: any) => r.id === report.id || r.name.toLowerCase() === report.name.toLowerCase());
+    const isNewReport = !existing;
+
+    if (existing) {
+      if (!report.note && existing.note) {
+        report.note = existing.note;
+      }
+      if (report.saved === undefined || report.saved === false) {
+        if (existing.saved) {
+          report.saved = existing.saved;
+        }
+      }
+    }
+
     if (user.credits === undefined) user.credits = 10;
-    if (user.credits > 0 && user.plan !== 'Pro') {
+    if (isNewReport && user.credits > 0 && user.plan !== 'Pro') {
       user.credits--;
     }
 
@@ -63,11 +78,11 @@ export async function POST(req: NextRequest) {
     ];
 
     const admin = user.team.find((m: any) => m.role === 'admin');
-    if (admin) {
+    if (admin && isNewReport) {
       admin.tears = (admin.tears || 0) + 1;
     }
 
-    user.reports = (user.reports || []).filter((r: any) => r.id !== report.id && r.name !== report.name);
+    user.reports = (user.reports || []).filter((r: any) => r.id !== report.id && r.name.toLowerCase() !== report.name.toLowerCase());
     user.reports.unshift(report);
 
     await db.saveUser(user);
@@ -76,5 +91,27 @@ export async function POST(req: NextRequest) {
   } catch (err: any) {
     console.error('API POST reports route error:', err.message);
     return NextResponse.json({ error: 'Server error saving report.' }, { status: 500 });
+  }
+}
+
+export async function DELETE(req: NextRequest) {
+  try {
+    const authHeader = req.headers.get('authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
+    }
+    const token = authHeader.split(' ')[1];
+    const user = await db.getUserByToken(token);
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
+    }
+
+    user.reports = [];
+    await db.saveUser(user);
+
+    return NextResponse.json({ success: true, reports: [] });
+  } catch (err: any) {
+    console.error('API DELETE all reports route error:', err.message);
+    return NextResponse.json({ error: 'Server error clearing reports.' }, { status: 500 });
   }
 }
