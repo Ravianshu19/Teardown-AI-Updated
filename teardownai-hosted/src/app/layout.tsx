@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import Script from 'next/script';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -20,11 +21,10 @@ export default function RootLayout({
           href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap"
           rel="stylesheet"
         />
-        {/* eslint-disable-next-line @next/next/no-sync-scripts */}
-        <script src="https://checkout.razorpay.com/v1/checkout.js" defer></script>
       </head>
       <body>
         {children}
+        <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="afterInteractive" />
       </body>
     </html>
   );
