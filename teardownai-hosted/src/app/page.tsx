@@ -890,6 +890,7 @@ export default function LandingPage() {
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && triggerAnalysis(searchQuery)}
+                aria-label="Product, company, or URL to analyze"
               />
               <button className="run-btn" id="run-btn" disabled={isRunning} onClick={() => triggerAnalysis(searchQuery)}>
                 {isRunning ? (
@@ -1335,31 +1336,31 @@ export default function LandingPage() {
             {authTab === 'login' ? (
               <form id="login-form" onSubmit={(e) => handleAuthSubmit(e, 'login')}>
                 <div style={{ marginBottom: '14px' }}>
-                  <label className="auth-lbl">Email Address</label>
-                  <input className="inp" type="email" placeholder="you@example.com" required value={loginEmail} onChange={e => setLoginEmail(e.target.value)} autoComplete="username" />
+                  <label className="auth-lbl" htmlFor="login-email">Email Address</label>
+                  <input className="inp" id="login-email" type="email" placeholder="you@example.com" required value={loginEmail} onChange={e => setLoginEmail(e.target.value)} autoComplete="username" />
                 </div>
                 <div style={{ marginBottom: '20px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                    <label className="auth-lbl" style={{ marginBottom: 0 }}>Password</label>
+                    <label className="auth-lbl" style={{ marginBottom: 0 }} htmlFor="login-password">Password</label>
                     <a href="#" onClick={(e) => { e.preventDefault(); showToast('Please contact support to reset your password.', 'warn'); }} style={{ fontSize: '11px', color: 'var(--acc)', textDecoration: 'none', fontWeight: 600 }}>Forgot password?</a>
                   </div>
-                  <input className="inp" type="password" placeholder="••••••••" required value={loginPassword} onChange={e => setLoginPassword(e.target.value)} autoComplete="current-password" />
+                  <input className="inp" id="login-password" type="password" placeholder="••••••••" required value={loginPassword} onChange={e => setLoginPassword(e.target.value)} autoComplete="current-password" />
                 </div>
                 <button className="auth-submit-btn" type="submit">Log In</button>
               </form>
             ) : (
               <form id="register-form" onSubmit={(e) => handleAuthSubmit(e, 'register')}>
                 <div style={{ marginBottom: '12px' }}>
-                  <label className="auth-lbl">Full Name</label>
-                  <input className="inp" type="text" placeholder="John Doe" required value={regName} onChange={e => setRegName(e.target.value)} autoComplete="name" />
+                  <label className="auth-lbl" htmlFor="reg-name">Full Name</label>
+                  <input className="inp" id="reg-name" type="text" placeholder="John Doe" required value={regName} onChange={e => setRegName(e.target.value)} autoComplete="name" />
                 </div>
                 <div style={{ marginBottom: '12px' }}>
-                  <label className="auth-lbl">Email Address</label>
-                  <input className="inp" type="email" placeholder="you@example.com" required value={regEmail} onChange={e => setRegEmail(e.target.value)} autoComplete="email" />
+                  <label className="auth-lbl" htmlFor="reg-email">Email Address</label>
+                  <input className="inp" id="reg-email" type="email" placeholder="you@example.com" required value={regEmail} onChange={e => setRegEmail(e.target.value)} autoComplete="email" />
                 </div>
                 <div style={{ marginBottom: '20px' }}>
-                  <label className="auth-lbl">Password</label>
-                  <input className="inp" type="password" placeholder="Min. 8 characters" required minLength={8} value={regPassword} onChange={e => setRegPassword(e.target.value)} autoComplete="new-password" />
+                  <label className="auth-lbl" htmlFor="reg-password">Password</label>
+                  <input className="inp" id="reg-password" type="password" placeholder="Min. 8 characters" required minLength={8} value={regPassword} onChange={e => setRegPassword(e.target.value)} autoComplete="new-password" />
                 </div>
                 <button className="auth-submit-btn" type="submit">Create Account</button>
               </form>

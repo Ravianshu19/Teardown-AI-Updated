@@ -962,6 +962,7 @@ function ReportsView({
           style={{ maxWidth: '200px', padding: '8px 12px', fontSize: '13px' }}
           value={searchQuery}
           onChange={e => setSearchQuery(e.target.value)}
+          aria-label="Search reports"
         />
         <select
           value={sortBy}
@@ -1099,6 +1100,7 @@ function TeamView({
             style={{ flex: 1, minWidth: '160px', padding: '8px 12px', fontSize: '13px' }}
             value={inviteEmail}
             onChange={e => setInviteEmail(e.target.value)}
+            aria-label="Email address to invite"
           />
           <button className="r-btn r-btn-p" onClick={handleInviteMember}>Send invite</button>
         </div>
@@ -1291,7 +1293,7 @@ function SettingsView({
         <div className="ti" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '10px', padding: '16px' }}>
           <div style={{ fontSize: '13px', fontWeight: 600 }}>Display name</div>
           <div style={{ display: 'flex', gap: '8px', width: '100%', flexWrap: 'wrap' }}>
-            <input className="inp" style={{ flex: 1, minWidth: '140px', padding: '8px 12px', fontSize: '13px' }} value={setFieldUsername} onChange={e => setSetFieldUsername(e.target.value)} />
+            <input className="inp" style={{ flex: 1, minWidth: '140px', padding: '8px 12px', fontSize: '13px' }} value={setFieldUsername} onChange={e => setSetFieldUsername(e.target.value)} aria-label="Display name" />
             <button className="r-btn r-btn-p" onClick={() => handleSaveSetting('name')}>Save</button>
           </div>
         </div>
@@ -1299,7 +1301,7 @@ function SettingsView({
         <div className="ti" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '10px', padding: '16px' }}>
           <div style={{ fontSize: '13px', fontWeight: 600 }}>Email address</div>
           <div style={{ display: 'flex', gap: '8px', width: '100%', flexWrap: 'wrap', alignItems: 'center' }}>
-            <input className="inp" style={{ flex: 1, minWidth: '140px', padding: '8px 12px', fontSize: '13px', opacity: 0.7, cursor: 'not-allowed' }} value={setFieldEmail} readOnly disabled />
+            <input className="inp" style={{ flex: 1, minWidth: '140px', padding: '8px 12px', fontSize: '13px', opacity: 0.7, cursor: 'not-allowed' }} value={setFieldEmail} readOnly disabled aria-label="Email address" />
             <span style={{ fontSize: '11px', color: 'var(--muted)' }}>Email cannot be changed</span>
           </div>
         </div>
