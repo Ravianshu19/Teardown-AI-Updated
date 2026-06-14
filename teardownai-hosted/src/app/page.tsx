@@ -1160,19 +1160,19 @@ export default function LandingPage() {
             { title: 'PDF & Sharing Exports', icon: '📤', items: ['Print-ready layouts', 'Local HTML download', 'Team shared links'] },
             { title: 'Collaborative Workspace', icon: '💻', items: ['Multi-seat workspace', 'Shared report history', 'Team admin panels'] }
           ].map((feat, idx) => (
-            <div key={idx} className="feat-card2">
-              <div className="feat-header">
-                <span className="feat-icon">{feat.icon}</span>
-                <div className="feat-title">{feat.title}</div>
+            <div key={idx} className="fc2 card">
+              <div className="fc2-top">
+                <div className="fc2-title">{feat.title}</div>
+                <span className="fc2-badge" style={{ fontSize: '18px' }}>{feat.icon}</span>
               </div>
-              <div className="feat-checklist">
+              <ul className="fc2-checks">
                 {feat.items.map((item, id) => (
-                  <div key={id} className="feat-chk-item">
-                    <span className="feat-chk-bullet">✓</span>
+                  <li key={id}>
+                    <span className="fcheck">✓</span>
                     <span>{item}</span>
-                  </div>
+                  </li>
                 ))}
-              </div>
+              </ul>
             </div>
           ))}
         </div>
@@ -1184,21 +1184,23 @@ export default function LandingPage() {
         <div className="sec-title">From input to senior-level product analysis</div>
         <div className="sec-sub">Three automated research steps generate complete product strategies.</div>
 
-        <div className="steps-grid" style={{ marginTop: '2rem' }}>
-          <div className="step-card">
-            <div className="step-num">01</div>
-            <div className="step-title">Input Product Name or URL</div>
-            <p className="step-desc">Enter any consumer app, SaaS dashboard, or URL. Our scraper instantly extracts site copy and metadata.</p>
-          </div>
-          <div className="step-card">
-            <div className="step-num">02</div>
-            <div className="step-title">AI Research Scanning</div>
-            <p className="step-desc">Our engine gathers social signals, App Store feedback, and industry benchmarks, feeding Claude with context.</p>
-          </div>
-          <div className="step-card">
-            <div className="step-num">03</div>
-            <div className="step-title">Strategic Synthesis</div>
-            <p className="step-desc">Claude generates SWOT frameworks, RICE matrices, and user story drafts structured exactly like senior PM blueprints.</p>
+        <div className="steps" style={{ marginTop: '2rem' }}>
+          <div className="steps-row" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
+            <div className="step">
+              <div className="snum">01</div>
+              <h3>Input Product Name or URL</h3>
+              <p>Enter any consumer app, SaaS dashboard, or URL. Our scraper instantly extracts site copy and metadata.</p>
+            </div>
+            <div className="step">
+              <div className="snum">02</div>
+              <h3>AI Research Scanning</h3>
+              <p>Our engine gathers social signals, App Store feedback, and industry benchmarks, feeding Claude with context.</p>
+            </div>
+            <div className="step">
+              <div className="snum">03</div>
+              <h3>Strategic Synthesis</h3>
+              <p>Claude generates SWOT frameworks, RICE matrices, and user story drafts structured exactly like senior PM blueprints.</p>
+            </div>
           </div>
         </div>
       </div>
@@ -1215,20 +1217,18 @@ export default function LandingPage() {
           <span className={`tog-lbl ${billingPeriod === 'annual' ? 'on' : ''}`} id="tog-annual">Billed Annually <span className="discount">Save 30%</span></span>
         </div>
 
-        <div className="pricing-grid" style={{ marginTop: '2rem' }}>
+        <div className="price-grid" style={{ marginTop: '2rem' }}>
           {/* Free / Guest Plan */}
-          <div className="p-card" id="plan-starter">
-            <div className="p-card-top">
-              <div className="p-tag">Starter</div>
-              <div className="p-amt">₹0<sub>/month</sub></div>
-              <div className="p-desc">Test-drive the engine with basic PM modules.</div>
-            </div>
-            <div className="p-features">
-              <div className="pf"><span className="ico">✓</span> 10 teardowns total</div>
-              <div className="pf"><span className="ico">✓</span> Core research overview</div>
-              <div className="pf"><span className="ico">✓</span> SWOT frameworks</div>
-              <div className="pf"><span className="ico">✓</span> Export HTML reports</div>
-            </div>
+          <div className="pc card" id="plan-starter">
+            <div className="p-tier">Starter</div>
+            <div className="p-amt">₹0<sub>/month</sub></div>
+            <div className="p-desc">Test-drive the engine with basic PM modules.</div>
+            <ul className="p-feats">
+              <li><span className="ti-check">✓</span> 10 teardowns total</li>
+              <li><span className="ti-check">✓</span> Core research overview</li>
+              <li><span className="ti-check">✓</span> SWOT frameworks</li>
+              <li><span className="ti-check">✓</span> Export HTML reports</li>
+            </ul>
             <button className="p-btn" onClick={() => {
               if (token) {
                 router.push('/portal');
@@ -1240,21 +1240,19 @@ export default function LandingPage() {
           </div>
 
           {/* Student Plan */}
-          <div className="p-card" id="plan-student">
-            <div className="p-card-top">
-              <div className="p-tag">Student</div>
-              <div className="p-amt">
-                {billingPeriod === 'monthly' ? '₹199' : '₹139'}
-                <sub>/month</sub>
-              </div>
-              <div className="p-desc">For APMs and students mapping visual cases.</div>
+          <div className="pc card" id="plan-student">
+            <div className="p-tier">Student</div>
+            <div className="p-amt">
+              {billingPeriod === 'monthly' ? '₹199' : '₹139'}
+              <sub>/month</sub>
             </div>
-            <div className="p-features">
-              <div className="pf"><span className="ico">✓</span> 15 teardowns/month</div>
-              <div className="pf"><span className="ico">✓</span> All 8 report views</div>
-              <div className="pf"><span className="ico">✓</span> Export print-ready PDFs</div>
-              <div className="pf"><span className="ico">✓</span> RICE prioritisation matrices</div>
-            </div>
+            <div className="p-desc">For APMs and students mapping visual cases.</div>
+            <ul className="p-feats">
+              <li><span className="ti-check">✓</span> 15 teardowns/month</li>
+              <li><span className="ti-check">✓</span> All 8 report views</li>
+              <li><span className="ti-check">✓</span> Export print-ready PDFs</li>
+              <li><span className="ti-check">✓</span> RICE prioritisation matrices</li>
+            </ul>
             <button className="p-btn" onClick={() => {
               if (token) {
                 router.push('/portal?view=billing');
@@ -1266,25 +1264,21 @@ export default function LandingPage() {
           </div>
 
           {/* Pro Plan */}
-          <div className="p-card p-card-popular" id="plan-pro" style={{ border: '1.5px solid var(--ink)' }}>
-            <div className="p-card-top">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div className="p-tag" style={{ background: 'var(--ink)', color: 'var(--bg)' }}>Pro</div>
-                <span className="p-badge" style={{ background: 'var(--ink)', color: 'var(--bg)' }}>MOST POPULAR</span>
-              </div>
-              <div className="p-amt">
-                {billingPeriod === 'monthly' ? '₹1,499' : '₹1,049'}
-                <sub>/month</sub>
-              </div>
-              <div className="p-desc">Unlimited generation, custom scraping and team features.</div>
+          <div className="pc card pop" id="plan-pro">
+            <span className="pop-chip">MOST POPULAR</span>
+            <div className="p-tier">Pro</div>
+            <div className="p-amt">
+              {billingPeriod === 'monthly' ? '₹1,499' : '₹1,049'}
+              <sub>/month</sub>
             </div>
-            <div className="p-features">
-              <div className="pf"><span className="ico">✓</span> Unlimited teardown runs</div>
-              <div className="pf"><span className="ico">✓</span> Advanced web scraping integrations</div>
-              <div className="pf"><span className="ico">✓</span> Custom prompt override parameters</div>
-              <div className="pf"><span className="ico">✓</span> Add up to 3 team members</div>
-            </div>
-            <button className="p-btn p-btn-primary" onClick={() => {
+            <div className="p-desc">Unlimited generation, custom scraping and team features.</div>
+            <ul className="p-feats">
+              <li><span className="ti-check">✓</span> Unlimited teardown runs</li>
+              <li><span className="ti-check">✓</span> Advanced web scraping integrations</li>
+              <li><span className="ti-check">✓</span> Custom prompt override parameters</li>
+              <li><span className="ti-check">✓</span> Add up to 3 team members</li>
+            </ul>
+            <button className="p-btn fill" onClick={() => {
               if (token) {
                 router.push('/portal?view=billing');
               } else {
