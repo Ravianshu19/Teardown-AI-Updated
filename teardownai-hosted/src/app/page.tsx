@@ -1220,72 +1220,84 @@ export default function LandingPage() {
         <div className="price-grid" style={{ marginTop: '2rem' }}>
           {/* Free / Guest Plan */}
           <div className="pc card" id="plan-starter">
-            <div className="p-tier">Starter</div>
-            <div className="p-amt">₹0<sub>/month</sub></div>
-            <div className="p-desc">Test-drive the engine with basic PM modules.</div>
-            <ul className="p-feats">
-              <li><span className="ti-check">✓</span> 10 teardowns total</li>
-              <li><span className="ti-check">✓</span> Core research overview</li>
-              <li><span className="ti-check">✓</span> SWOT frameworks</li>
-              <li><span className="ti-check">✓</span> Export HTML reports</li>
-            </ul>
-            <button className="p-btn" onClick={() => {
-              if (token) {
-                router.push('/portal');
-              } else {
-                setIsAuthModalOpen(true);
-                setAuthTab('register');
-              }
-            }}>Get Started Free</button>
+            <div className="pc-body" style={{ padding: '24px', display: 'flex', flexDirection: 'column', height: '100%', width: '100%' }}>
+              <div>
+                <div className="p-tier">Starter</div>
+                <div className="p-amt">₹0<sub>/month</sub></div>
+                <div className="p-desc">Test-drive the engine with basic PM modules.</div>
+              </div>
+              <ul className="p-feats">
+                <li><span className="ti-check">✓</span> 10 teardowns total</li>
+                <li><span className="ti-check">✓</span> Core research overview</li>
+                <li><span className="ti-check">✓</span> SWOT frameworks</li>
+                <li><span className="ti-check">✓</span> Export HTML reports</li>
+              </ul>
+              <button className="p-btn" onClick={() => {
+                if (token) {
+                  router.push('/portal');
+                } else {
+                  setIsAuthModalOpen(true);
+                  setAuthTab('register');
+                }
+              }}>Get Started Free</button>
+            </div>
           </div>
 
           {/* Student Plan */}
           <div className="pc card" id="plan-student">
-            <div className="p-tier">Student</div>
-            <div className="p-amt">
-              {billingPeriod === 'monthly' ? '₹199' : '₹139'}
-              <sub>/month</sub>
+            <div className="pc-body" style={{ padding: '24px', display: 'flex', flexDirection: 'column', height: '100%', width: '100%' }}>
+              <div>
+                <div className="p-tier">Student</div>
+                <div className="p-amt">
+                  {billingPeriod === 'monthly' ? '₹199' : '₹139'}
+                  <sub>/month</sub>
+                </div>
+                <div className="p-desc">For APMs and students mapping visual cases.</div>
+              </div>
+              <ul className="p-feats">
+                <li><span className="ti-check">✓</span> 15 teardowns/month</li>
+                <li><span className="ti-check">✓</span> All 8 report views</li>
+                <li><span className="ti-check">✓</span> Export print-ready PDFs</li>
+                <li><span className="ti-check">✓</span> RICE prioritisation matrices</li>
+              </ul>
+              <button className="p-btn" onClick={() => {
+                if (token) {
+                  router.push('/portal?view=billing');
+                } else {
+                  setIsAuthModalOpen(true);
+                  setAuthTab('login');
+                }
+              }}>Upgrade to Student</button>
             </div>
-            <div className="p-desc">For APMs and students mapping visual cases.</div>
-            <ul className="p-feats">
-              <li><span className="ti-check">✓</span> 15 teardowns/month</li>
-              <li><span className="ti-check">✓</span> All 8 report views</li>
-              <li><span className="ti-check">✓</span> Export print-ready PDFs</li>
-              <li><span className="ti-check">✓</span> RICE prioritisation matrices</li>
-            </ul>
-            <button className="p-btn" onClick={() => {
-              if (token) {
-                router.push('/portal?view=billing');
-              } else {
-                setIsAuthModalOpen(true);
-                setAuthTab('login');
-              }
-            }}>Upgrade to Student</button>
           </div>
 
           {/* Pro Plan */}
           <div className="pc card pop" id="plan-pro">
             <span className="pop-chip">MOST POPULAR</span>
-            <div className="p-tier">Pro</div>
-            <div className="p-amt">
-              {billingPeriod === 'monthly' ? '₹1,499' : '₹1,049'}
-              <sub>/month</sub>
+            <div className="pc-body" style={{ padding: '24px', display: 'flex', flexDirection: 'column', height: '100%', width: '100%' }}>
+              <div>
+                <div className="p-tier">Pro</div>
+                <div className="p-amt">
+                  {billingPeriod === 'monthly' ? '₹1,499' : '₹1,049'}
+                  <sub>/month</sub>
+                </div>
+                <div className="p-desc">Unlimited generation, custom scraping and team features.</div>
+              </div>
+              <ul className="p-feats">
+                <li><span className="ti-check">✓</span> Unlimited teardown runs</li>
+                <li><span className="ti-check">✓</span> Advanced web scraping integrations</li>
+                <li><span className="ti-check">✓</span> Custom prompt override parameters</li>
+                <li><span className="ti-check">✓</span> Add up to 3 team members</li>
+              </ul>
+              <button className="p-btn p-btn-pro" onClick={() => {
+                if (token) {
+                  router.push('/portal?view=billing');
+                } else {
+                  setIsAuthModalOpen(true);
+                  setAuthTab('login');
+                }
+              }}>Upgrade to Pro</button>
             </div>
-            <div className="p-desc">Unlimited generation, custom scraping and team features.</div>
-            <ul className="p-feats">
-              <li><span className="ti-check">✓</span> Unlimited teardown runs</li>
-              <li><span className="ti-check">✓</span> Advanced web scraping integrations</li>
-              <li><span className="ti-check">✓</span> Custom prompt override parameters</li>
-              <li><span className="ti-check">✓</span> Add up to 3 team members</li>
-            </ul>
-            <button className="p-btn fill" onClick={() => {
-              if (token) {
-                router.push('/portal?view=billing');
-              } else {
-                setIsAuthModalOpen(true);
-                setAuthTab('login');
-              }
-            }}>Upgrade to Pro</button>
           </div>
         </div>
       </div>
